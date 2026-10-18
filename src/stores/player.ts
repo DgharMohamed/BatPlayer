@@ -28,6 +28,8 @@ export const displayTitle = writable("");
 export const eofReached = writable(false);
 /** True between `start-file` and `file-loaded`. */
 export const loading = writable(false);
+/** Basename of the file being opened, shown on the loading plate. */
+export const loadingName = writable("");
 
 /** Popup notice pinned to the bottom of the stage, or `null` when hidden. */
 export const notice = writable<{ kind: "error" | "info"; text: string } | null>(null);

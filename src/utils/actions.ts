@@ -21,7 +21,9 @@ import { get } from "svelte/store";
 import {
   currentTime,
   duration,
+  eofReached,
   muted,
+  paused,
   showNotice,
   speed,
   volume,
@@ -50,7 +52,22 @@ export async function report(action: () => Promise<unknown>): Promise<void> {
   }
 }
 
-export const togglePlayPause = (): Promise<void> => report(playPause);
+/**
+ * Restarts a file parked at the end (`keep-open` pauses at EOF, so a plain
+ * unpause would not replay): seek home first, then resume.
+ */
+function replayFromStart(): Promise<void> {
+  return report(async () => {
+    await seekTo(0);
+    if (get(paused)) {
+      await playPause();
+    }
+  });
+}
+
+export function togglePlayPause(): Promise<void> {
+  return get(eofReached) ? replayFromStart() : report(playPause);
+}
 
 export const stopPlayback = (): Promise<void> => report(stop);
 

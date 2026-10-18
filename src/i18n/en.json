@@ -12,6 +12,11 @@
   "drop": {
     "overlay": "Drop to play"
   },
+  "loading": {
+    "title": "Opening…",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling…"
+  },
   "topBar": {
     "appTitle": "BatPlayer",
     "minimize": "Minimize",
@@ -54,6 +59,7 @@
   "controls": {
     "play": "Play",
     "pause": "Pause",
+    "replay": "Replay",
     "stop": "Stop",
     "previous": "Previous",
     "next": "Next",
@@ -73,5 +79,10 @@
     "audio": "Audio",
     "subtitle": "Subtitle",
     "off": "off"
+  },
+  "notices": {
+    "subtitleAttached": "subtitle attached",
+    "subtitleNeedsMedia": "Open a media file before attaching subtitles",
+    "pickerFailed": "File picker failed"
   }
 }

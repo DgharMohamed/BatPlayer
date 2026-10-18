@@ -15,6 +15,7 @@
   import {
     currentTime,
     duration,
+    eofReached,
     idle,
     mediaLoaded,
     muted,
@@ -118,12 +119,20 @@
         class="icon-btn play-btn"
         type="button"
         disabled={!workable}
-        title={t($paused ? "controls.play" : "controls.pause")}
-        aria-label={t($paused ? "controls.play" : "controls.pause")}
+        title={t(
+          $eofReached ? "controls.replay" : $paused ? "controls.play" : "controls.pause",
+        )}
+        aria-label={t(
+          $eofReached ? "controls.replay" : $paused ? "controls.play" : "controls.pause",
+        )}
         onclick={() => void togglePlayPause()}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          {#if $paused}
+          {#if $eofReached}
+            <path
+              d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"
+            />
+          {:else if $paused}
             <path d="M8 5v14l11-7z" />
           {:else}
             <path d="M6 5h4v14H6zM14 5h4v14h-4z" />

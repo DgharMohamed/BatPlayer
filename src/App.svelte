@@ -4,6 +4,7 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import ControlBar from "./components/ControlBar.svelte";
   import BatLogo from "./components/BatLogo.svelte";
+  import LoadingOverlay from "./components/LoadingOverlay.svelte";
   import Osd from "./components/Osd.svelte";
   import SpeedChip from "./components/SpeedChip.svelte";
   import TopBar from "./components/topbar/TopBar.svelte";
@@ -12,6 +13,7 @@
   import {
     bindPlayerEvents,
     idle,
+    loading,
     mediaLoaded,
     notice,
   } from "./stores/player";
@@ -24,6 +26,7 @@
     seekRelative,
     stepSpeed,
     stepVolume,
+    stopPlayback,
     takeSnapshot,
     toggleMute,
     togglePlayPause,
@@ -106,7 +109,13 @@
         return;
       case "Escape":
         event.preventDefault();
-        void exitFullscreen();
+        // A load in flight claims Escape first: pressing it again leaves
+        // fullscreen, so a hung open never traps the user.
+        if ($loading) {
+          void stopPlayback();
+        } else {
+          void exitFullscreen();
+        }
         return;
       case "m":
         void toggleMute();
@@ -214,6 +223,7 @@
     {/if}
   </main>
 
+  <LoadingOverlay />
   <ControlBar />
   <Osd />
   <SpeedChip />
