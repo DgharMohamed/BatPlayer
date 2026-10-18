@@ -1,0 +1,34 @@
+@import "./variables.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/*
+ * The page background must stay transparent: the native video surface is a
+ * real window sitting behind this webview, and its near-black color comes
+ * from the native side, not from CSS.
+ */
+html,
+body {
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}

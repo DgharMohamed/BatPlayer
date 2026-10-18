@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "BatPlayer"
+  },
+  "video": {
+    "areaLabel": "Video area"
+  },
+  "idle": {
+    "hint": "Drop a video here or press Ctrl+O to open a file"
+  },
+  "controls": {
+    "play": "Play",
+    "pause": "Pause",
+    "previous": "Previous",
+    "next": "Next",
+    "seekBar": "Seek",
+    "mute": "Mute",
+    "volume": "Volume",
+    "playlist": "Playlist",
+    "fullscreen": "Fullscreen"
+  }
+}

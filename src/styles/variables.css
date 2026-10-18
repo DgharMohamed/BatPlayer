@@ -1,0 +1,30 @@
+/*
+ * BatPlayer design tokens. Dark is the default theme; a light palette that
+ * respects the system preference arrives with the settings milestone.
+ */
+:root {
+  color-scheme: dark;
+
+  --bg: #0a0a0c;
+  --bg-elevated: #131318;
+  --overlay: rgba(10, 10, 13, 0.88);
+  --border: rgba(255, 255, 255, 0.08);
+
+  --text: #e9e9ec;
+  --text-dim: #9a9aa3;
+  --text-faint: #5c5c66;
+
+  /* BatPlayer electric yellow. */
+  --accent: #ffd400;
+  --accent-soft: rgba(255, 212, 0, 0.28);
+  --danger: #ff5c5c;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Helvetica Neue", sans-serif;
+
+  --transition-fast: 140ms ease;
+  --transition-medium: 240ms ease;
+}
