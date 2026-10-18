@@ -66,5 +66,12 @@
     "leaveFullscreen": "Leave fullscreen (Esc)",
     "snapshot": "Save snapshot",
     "menuBar": "Menu bar"
+  },
+  "osd": {
+    "volume": "Volume",
+    "muted": "Muted",
+    "audio": "Audio",
+    "subtitle": "Subtitle",
+    "off": "off"
   }
 }

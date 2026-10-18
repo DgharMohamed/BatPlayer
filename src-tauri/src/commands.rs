@@ -2,9 +2,10 @@
 
 use tauri::{Manager, State};
 
-use crate::player::{Player, PlayerError};
+use crate::player::{Player, PlayerError, TrackInfo};
 
 type PlayerResult = Result<(), String>;
+type TrackResult = Result<TrackInfo, String>;
 type ScreenshotResult = Result<String, String>;
 
 fn map(err: PlayerError) -> String {
@@ -52,12 +53,12 @@ pub fn set_speed(speed: f64, player: State<'_, Player>) -> PlayerResult {
 }
 
 #[tauri::command]
-pub fn cycle_audio(player: State<'_, Player>) -> PlayerResult {
+pub fn cycle_audio(player: State<'_, Player>) -> TrackResult {
     player.cycle_audio().map_err(map)
 }
 
 #[tauri::command]
-pub fn cycle_subtitle(player: State<'_, Player>) -> PlayerResult {
+pub fn cycle_subtitle(player: State<'_, Player>) -> TrackResult {
     player.cycle_subtitle().map_err(map)
 }
 

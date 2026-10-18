@@ -49,6 +49,15 @@ pub enum PlayerEvent {
     EndFile { error: Option<String> },
 }
 
+/// Where a track cycle landed: the 1-based position of the now-current track
+/// among the tracks of that type, and how many of that type the file has.
+/// `current` is 0 when the type is switched off (or the file has none).
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct TrackInfo {
+    pub current: u32,
+    pub total: u32,
+}
+
 pub struct Player {
     mpv: Arc<Mpv>,
     shutdown: Arc<AtomicBool>,
@@ -139,14 +148,16 @@ impl Player {
         Ok(())
     }
 
-    pub fn cycle_audio(&self) -> Result<(), PlayerError> {
+    /// Cycles the audio track; the result says where it landed.
+    pub fn cycle_audio(&self) -> Result<TrackInfo, PlayerError> {
         self.mpv.command("cycle", &["audio"])?;
-        Ok(())
+        Ok(track_info(&self.mpv, "aid", "audio"))
     }
 
-    pub fn cycle_subtitle(&self) -> Result<(), PlayerError> {
+    /// Cycles the subtitle track; the result says where it landed.
+    pub fn cycle_subtitle(&self) -> Result<TrackInfo, PlayerError> {
         self.mpv.command("cycle", &["sub"])?;
-        Ok(())
+        Ok(track_info(&self.mpv, "sid", "sub"))
     }
 
     pub fn add_subtitle_file(&self, path: &str) -> Result<(), PlayerError> {
@@ -193,6 +204,40 @@ impl Drop for Player {
         if let Some(thread) = self.event_thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+/// Reads the position of the current audio/subtitle track. `selector` is
+/// mpv's `aid`/`sid`; anything that is not a positive number ("no", "auto")
+/// counts as switched off.
+fn track_info(mpv: &Mpv, selector: &str, kind: &str) -> TrackInfo {
+    let current = match mpv.get_property::<String>(selector) {
+        Ok(text) => text.parse::<i64>().unwrap_or(0),
+        Err(_) => mpv.get_property::<i64>(selector).unwrap_or(0),
+    };
+    let count = mpv.get_property::<i64>("track-list/count").unwrap_or(0);
+    let mut total = 0u32;
+    let mut position = 0u32;
+    for index in 0..count {
+        let entry = format!("track-list/{index}");
+        let matches_kind = mpv
+            .get_property::<String>(&format!("{entry}/type"))
+            .is_ok_and(|value| value == kind);
+        if !matches_kind {
+            continue;
+        }
+        total += 1;
+        if current > 0
+            && mpv
+                .get_property::<i64>(&format!("{entry}/id"))
+                .is_ok_and(|id| id == current)
+        {
+            position = total;
+        }
+    }
+    TrackInfo {
+        current: position,
+        total,
     }
 }
 
@@ -282,5 +327,15 @@ mod tests {
         })
         .expect("serialization is plain JSON");
         assert_eq!(json, r#"{"type":"property","name":"pause","value":true}"#);
+    }
+
+    #[test]
+    fn track_info_serializes_plain_fields() {
+        let json = serde_json::to_string(&TrackInfo {
+            current: 2,
+            total: 3,
+        })
+        .expect("serialization is plain JSON");
+        assert_eq!(json, r#"{"current":2,"total":3}"#);
     }
 }

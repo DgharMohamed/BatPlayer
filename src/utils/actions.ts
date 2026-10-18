@@ -18,7 +18,15 @@ import {
   stop,
 } from "../api/player";
 import { get } from "svelte/store";
-import { muted, showNotice, speed, volume } from "../stores/player";
+import {
+  currentTime,
+  duration,
+  muted,
+  showNotice,
+  speed,
+  volume,
+} from "../stores/player";
+import { showOsd } from "../stores/osd";
 
 const VOLUME_MAX = 130;
 const SPEED_MIN = 0.25;
@@ -46,27 +54,63 @@ export const togglePlayPause = (): Promise<void> => report(playPause);
 
 export const stopPlayback = (): Promise<void> => report(stop);
 
-export const seekRelative = (seconds: number): Promise<void> =>
-  report(() => seekBy(seconds));
+/** Seeks by `seconds` and echoes the expected landing spot on the OSD. */
+export function seekRelative(seconds: number): Promise<void> {
+  const limit = get(duration) > 0 ? get(duration) : Number.POSITIVE_INFINITY;
+  const target = Math.max(0, Math.min(get(currentTime) + seconds, limit));
+  showOsd({ kind: "seek", delta: seconds, target });
+  return report(() => seekBy(seconds));
+}
 
 export const seekAbsolute = (seconds: number): Promise<void> =>
   report(() => seekTo(seconds));
 
-export const cycleAudioTrack = (): Promise<void> => report(cycleAudio);
+/** Cycles the audio track and reports the new position from the engine. */
+export async function cycleAudioTrack(): Promise<void> {
+  try {
+    const info = await cycleAudio();
+    showOsd({ kind: "audio", ...info });
+  } catch (error) {
+    showNotice(String(error));
+  }
+}
 
-export const cycleSubtitleTrack = (): Promise<void> => report(cycleSubtitle);
+export async function cycleSubtitleTrack(): Promise<void> {
+  try {
+    const info = await cycleSubtitle();
+    showOsd({ kind: "subtitle", ...info });
+  } catch (error) {
+    showNotice(String(error));
+  }
+}
 
-export const toggleMute = (): Promise<void> => report(() => setMute(!get(muted)));
+export function toggleMute(): Promise<void> {
+  const next = !get(muted);
+  // Unmuting is the interesting half: show the level that comes back.
+  showOsd(
+    next ? { kind: "muted" } : { kind: "volume", value: get(volume) },
+  );
+  return report(() => setMute(next));
+}
 
 /** Bumps volume by `delta`, clamped to mpv's configured range. */
-export const stepVolume = (delta: number): Promise<void> =>
-  report(() => setVolume(clampVolume(get(volume) + delta)));
+export function stepVolume(delta: number): Promise<void> {
+  const target = clampVolume(get(volume) + delta);
+  showOsd({ kind: "volume", value: target });
+  return report(() => setVolume(target));
+}
 
 /** Scales playback speed by +/− `delta`, clamped and rounded to 0.01. */
-export const stepSpeed = (delta: number): Promise<void> =>
-  report(() => setSpeed(clampSpeed(get(speed) + delta)));
+export function stepSpeed(delta: number): Promise<void> {
+  const target = clampSpeed(get(speed) + delta);
+  showOsd({ kind: "speed", speed: target });
+  return report(() => setSpeed(target));
+}
 
-export const resetSpeed = (): Promise<void> => report(() => setSpeed(1));
+export function resetSpeed(): Promise<void> {
+  showOsd({ kind: "speed", speed: 1 });
+  return report(() => setSpeed(1));
+}
 
 export const stepFrame = (direction: 1 | -1): Promise<void> =>
   report(() => frameStep(direction));

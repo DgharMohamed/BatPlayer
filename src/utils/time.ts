@@ -11,3 +11,8 @@ export function formatTime(seconds: number): string {
   const ss = String(s).padStart(2, "0");
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
+
+/** Format a playback speed factor for the OSD and the speed chip ("1.5×"). */
+export function formatSpeed(speed: number): string {
+  return `${Number(speed.toFixed(2))}×`;
+}

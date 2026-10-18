@@ -61,9 +61,12 @@ export const setMute = (mute: boolean): Promise<void> => invoke("set_mute", { mu
 
 export const setSpeed = (speed: number): Promise<void> => invoke("set_speed", { speed });
 
-export const cycleAudio = (): Promise<void> => invoke("cycle_audio");
+/** Position after a track cycle; `current` is 0 when the type is off. */
+export type TrackInfo = { current: number; total: number };
 
-export const cycleSubtitle = (): Promise<void> => invoke("cycle_subtitle");
+export const cycleAudio = (): Promise<TrackInfo> => invoke("cycle_audio");
+
+export const cycleSubtitle = (): Promise<TrackInfo> => invoke("cycle_subtitle");
 
 export const addSubtitleFile = (path: string): Promise<void> =>
   invoke("add_subtitle_file", { path });

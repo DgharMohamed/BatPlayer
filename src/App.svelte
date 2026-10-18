@@ -4,6 +4,8 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import ControlBar from "./components/ControlBar.svelte";
   import BatLogo from "./components/BatLogo.svelte";
+  import Osd from "./components/Osd.svelte";
+  import SpeedChip from "./components/SpeedChip.svelte";
   import TopBar from "./components/topbar/TopBar.svelte";
   import { t } from "./i18n";
   import { keepChromeVisible } from "./stores/chrome";
@@ -213,6 +215,8 @@
   </main>
 
   <ControlBar />
+  <Osd />
+  <SpeedChip />
 
   {#if draggingFiles}
     <div class="drop-overlay" aria-hidden="true">
