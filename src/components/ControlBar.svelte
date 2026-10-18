@@ -26,6 +26,8 @@
 
   /** Live (uncommitted) seek position while the range element is dragged. */
   let dragValue = $state<number | null>(null);
+  /** Pointer position over the seek bar (0..1), or null when the pointer is away. */
+  let hoverRatio = $state<number | null>(null);
 
   let workable = $derived($mediaLoaded && !$idle);
   const timeLabel = $derived(
@@ -33,6 +35,18 @@
   );
   const seekStep = $derived(
     $duration > 0 ? Math.min(1, Math.max(0.05, $duration / 600)) : 0.1,
+  );
+  /** Played share of the bar, painted as the accent fill. */
+  const playedPercent = $derived(
+    $duration > 0
+      ? Math.min(100, Math.max(0, ((dragValue ?? $currentTime) / $duration) * 100))
+      : 0,
+  );
+  /** Volume share of the bar's 130% mpv ceiling. */
+  const volumePercent = $derived(Math.min(100, Math.max(0, ($volume / 130) * 100)));
+  /** Hover tooltip position, kept just inside the bar edges. */
+  const tipPercent = $derived(
+    hoverRatio === null ? 0 : Math.min(99, Math.max(1, hoverRatio * 100)),
   );
 
   function onSeekInput(event: Event): void {
@@ -45,6 +59,18 @@
     if (Number.isFinite(value)) {
       void seekAbsolute(value);
     }
+  }
+
+  /** Tracks the pointer across the seek bar so the time tooltip can follow it. */
+  function onSeekHover(event: PointerEvent): void {
+    if (!workable) return;
+    const rect = (event.currentTarget as HTMLInputElement).getBoundingClientRect();
+    if (rect.width <= 0) return;
+    hoverRatio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+  }
+
+  function onSeekLeave(): void {
+    hoverRatio = null;
   }
 
   function onVolumeInput(event: Event): void {
@@ -63,18 +89,28 @@
   onpointerenter={() => pinChrome(true)}
   onpointerleave={() => pinChrome(false)}
 >
-  <input
-    class="seek-bar"
-    type="range"
-    min="0"
-    max={$duration}
-    step={seekStep}
-    value={dragValue ?? $currentTime}
-    aria-label={t("controls.seekBar")}
-    disabled={!workable}
-    oninput={onSeekInput}
-    onchange={onSeekCommit}
-  />
+  <div class="seek">
+    <input
+      class="seek-bar"
+      type="range"
+      min="0"
+      max={$duration}
+      step={seekStep}
+      value={dragValue ?? $currentTime}
+      style="--progress: {playedPercent}%"
+      aria-label={t("controls.seekBar")}
+      disabled={!workable}
+      onpointermove={onSeekHover}
+      onpointerleave={onSeekLeave}
+      oninput={onSeekInput}
+      onchange={onSeekCommit}
+    />
+    {#if hoverRatio !== null && $duration > 0 && workable}
+      <div class="seek-tip" style="left: {tipPercent}%">
+        {formatTime(hoverRatio * $duration)}
+      </div>
+    {/if}
+  </div>
 
   <div class="button-row">
     <div class="group">
@@ -136,6 +172,7 @@
         max="130"
         step="1"
         value={$volume}
+        style="--progress: {volumePercent}%"
         aria-label={t("controls.volume")}
         disabled={!workable}
         oninput={onVolumeInput}
@@ -296,13 +333,44 @@
     white-space: nowrap;
   }
 
+  /*
+   * Sliders keep a thin 4px ink but a 24px hit area, paint the played share
+   * in the accent, and expand slightly while hovered. `--progress` is set
+   * inline per render.
+   */
   input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.14);
+    height: 24px;
+    background-color: transparent;
+    background-image: linear-gradient(
+      to right,
+      var(--accent) var(--progress, 0%),
+      rgba(255, 255, 255, 0.24) var(--progress, 0%)
+    );
+    background-size: 100% 4px;
+    background-position: center;
+    background-repeat: no-repeat;
     outline: none;
+    cursor: pointer;
+    transition: background-size var(--transition-fast);
+  }
+
+  /* Neutralize the engine's default track paint; the stripe above is the ink. */
+  input[type="range"]::-webkit-slider-runnable-track {
+    background: transparent;
+  }
+
+  input[type="range"]:hover:enabled {
+    background-size: 100% 6px;
+  }
+
+  input[type="range"]:disabled {
+    background-image: linear-gradient(
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.1)
+    );
+    cursor: default;
   }
 
   input[type="range"]::-webkit-slider-thumb {
@@ -312,12 +380,22 @@
     height: 13px;
     border-radius: 50%;
     background: var(--accent);
-    box-shadow: 0 0 0 4px rgba(255, 212, 0, 0.14);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.5),
+      0 0 0 4px rgba(255, 212, 0, 0.14);
     transition: box-shadow var(--transition-fast);
   }
 
   input[type="range"]:hover:enabled::-webkit-slider-thumb {
-    box-shadow: 0 0 0 6px rgba(255, 212, 0, 0.2);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.5),
+      0 0 0 6px rgba(255, 212, 0, 0.22);
+  }
+
+  input[type="range"]:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.5),
+      0 0 0 6px rgba(255, 212, 0, 0.4);
   }
 
   input[type="range"]:disabled::-webkit-slider-thumb {
@@ -325,8 +403,29 @@
     box-shadow: none;
   }
 
+  .seek {
+    position: relative;
+  }
+
   .seek-bar {
+    display: block;
     width: 100%;
+  }
+
+  /* Floating time preview that follows the pointer over the seek bar. */
+  .seek-tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    transform: translateX(-50%);
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    white-space: nowrap;
   }
 
   .volume-bar {
