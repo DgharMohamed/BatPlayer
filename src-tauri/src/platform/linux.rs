@@ -19,4 +19,10 @@ impl VideoSurface {
     pub fn resize_to_fit(&self) -> Result<(), Error> {
         Ok(())
     }
+
+    /// Window id for mpv's `wid` option (an X11 window id). Unavailable until
+    /// the X11 subwindow is implemented.
+    pub fn wid(&self) -> Result<i64, Error> {
+        Err(Error::Unsupported)
+    }
 }

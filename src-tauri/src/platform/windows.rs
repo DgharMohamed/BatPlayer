@@ -72,9 +72,10 @@ impl VideoSurface {
         Ok(())
     }
 
-    /// Raw child window handle, for mpv's `wid` option (Milestone 2).
-    pub fn hwnd(&self) -> isize {
-        self.child
+    /// Window id for mpv's `wid` option: the raw child `HWND`, as an integer
+    /// because mpv takes a stringified pointer.
+    pub fn wid(&self) -> Result<i64, Error> {
+        Ok(self.child as i64)
     }
 }
 

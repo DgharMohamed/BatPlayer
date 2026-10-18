@@ -1,6 +1,7 @@
 {
   "app": {
-    "name": "BatPlayer"
+    "name": "BatPlayer",
+    "about": "BatPlayer — a modern media player built with Tauri v2 and libmpv."
   },
   "video": {
     "areaLabel": "Video area"
@@ -8,15 +9,62 @@
   "idle": {
     "hint": "Drop a video here or press Ctrl+O to open a file"
   },
+  "drop": {
+    "overlay": "Drop to play"
+  },
+  "topBar": {
+    "appTitle": "BatPlayer",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore size",
+    "close": "Close"
+  },
+  "menus": {
+    "media": "Media",
+    "playback": "Playback",
+    "audio": "Audio",
+    "video": "Video",
+    "subtitle": "Subtitle",
+    "help": "Help"
+  },
+  "menu": {
+    "openFile": "Open File…",
+    "exit": "Exit",
+    "playPause": "Play / Pause",
+    "stop": "Stop",
+    "seekForward": "Seek forward",
+    "seekBackward": "Seek backward",
+    "speedUp": "Faster playback",
+    "speedDown": "Slower playback",
+    "resetSpeed": "Normal playback speed",
+    "frameStep": "Step one frame forward",
+    "frameBack": "Step one frame backward",
+    "volumeUp": "Increase volume",
+    "volumeDown": "Decrease volume",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "audioTrack": "Next audio track",
+    "fullscreen": "Fullscreen",
+    "leaveFullscreen": "Leave fullscreen",
+    "snapshot": "Save snapshot",
+    "subtitleTrack": "Next subtitle track",
+    "loadSubtitle": "Add subtitle file…",
+    "about": "About BatPlayer"
+  },
   "controls": {
     "play": "Play",
     "pause": "Pause",
+    "stop": "Stop",
     "previous": "Previous",
     "next": "Next",
     "seekBar": "Seek",
     "mute": "Mute",
+    "unmute": "Unmute",
     "volume": "Volume",
     "playlist": "Playlist",
-    "fullscreen": "Fullscreen"
+    "fullscreen": "Fullscreen",
+    "leaveFullscreen": "Leave fullscreen (Esc)",
+    "snapshot": "Save snapshot",
+    "menuBar": "Menu bar"
   }
 }

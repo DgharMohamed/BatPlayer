@@ -11,6 +11,9 @@ src-tauri/gen/schemas/
 # Logs
 *.log
 
+# Vendored libmpv binaries (re-fetch with scripts/fetch-mpv.ps1)
+src-tauri/mpv/
+
 # OS artifacts
 .DS_Store
 Thumbs.db

@@ -19,4 +19,10 @@ impl VideoSurface {
     pub fn resize_to_fit(&self) -> Result<(), Error> {
         Ok(())
     }
+
+    /// Window id for mpv's `wid` option (an `NSView` pointer). Unavailable
+    /// until the child view is implemented.
+    pub fn wid(&self) -> Result<i64, Error> {
+        Err(Error::Unsupported)
+    }
 }
