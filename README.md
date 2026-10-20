@@ -1,25 +1,120 @@
 # BatPlayer 🦇
 
-A modern cross-platform media player in the class of VLC and PotPlayer, built
-with Tauri v2 and libmpv. Dark, minimal, and fast — near-black interface with
-an electric-yellow (`#FFD400`) bat-wing accent.
+BatPlayer is a modern, cross-platform media player built with Tauri v2 and
+libmpv. It pairs mpv playback with a dark, minimal interface and an
+electric-yellow (`#FFD400`) bat-wing accent.
 
-**Status: Milestone 2 of 6 complete** (mpv playback wired end to end). See the
-[roadmap](#roadmap) below.
+**Project status:** Milestone 2 of 6 is complete. Playback is wired end to end.
+See the [roadmap](#roadmap) for planned work.
 
-## Tech stack
+## Contents
 
-- **App framework:** Tauri v2 (Rust backend, web frontend)
-- **Playback engine:** libmpv via the `libmpv2` crate
-- **Frontend:** TypeScript + Vite + Svelte 5, plain CSS variables for theming
+- [Features](#features)
+- [Technology](#technology)
+- [Getting started](#getting-started)
+- [Development commands](#development-commands)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Architecture](#architecture)
+- [Autotest](#autotest)
+- [Project structure](#project-structure)
+- [Roadmap](#roadmap)
+- [Platform notes](#platform-notes)
+- [License](#license)
+
+## Features
+
+- Play media through the libmpv playback engine.
+- Open, seek, adjust volume and playback speed, and switch audio and subtitle
+  tracks.
+- Use a native video surface with HTML controls layered over it.
+- Run on Windows, Linux, and macOS, with platform-specific support and testing
+  noted below.
+
+## Technology
+
+- **Application:** Tauri v2
+- **Backend:** Rust
+- **Playback:** libmpv through the `libmpv2` crate
+- **Frontend:** TypeScript, Vite, and Svelte 5
+- **Theming:** CSS variables
+
+## Getting started
+
+### Prerequisites
+
+All platforms need [Node.js LTS](https://nodejs.org) and stable
+[Rust](https://rustup.rs). Windows builds use the MSVC toolchain.
+
+- **Windows:** Install Visual Studio Build Tools with the “Desktop development
+  with C++” workload. Install 7-Zip for the mpv fetch script. WebView2 is
+  preinstalled on Windows 10 and 11.
+- **Linux:** Install the [Tauri prerequisites for your distribution](https://tauri.app/start/prerequisites/)
+  and libmpv. For example: `sudo apt install libmpv-dev` (Debian/Ubuntu),
+  `sudo dnf install mpv-devel` (Fedora), or `sudo pacman -S mpv` (Arch).
+- **macOS:** Install Xcode Command Line Tools with `xcode-select --install`.
+  mpv embedding and window transparency have not yet been tested on macOS.
+
+The libmpv DLL and import library are not committed to the repository. On
+Windows, fetch them once with the provided script; this downloads an mpv dev
+build and generates `mpv.lib` using Visual Studio tools:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/fetch-mpv.ps1
+```
+
+On Linux and macOS, use the system libmpv package. The vendored files are only
+used on Windows.
+
+### Install dependencies and start the app
+
+```bash
+npm install
+npm run tauri dev
+```
+
+On Windows, run the mpv fetch script before starting the app if you have not
+already done so.
+
+## Development commands
+
+```bash
+npm run check        # Svelte and TypeScript checks
+npm run build        # Vite production build
+npm run tauri build  # Package the application
+```
+
+Run Rust commands from `src-tauri/`:
+
+```bash
+cargo clippy --all-targets -- -D warnings
+cargo fmt
+```
+
+Packaging targets (MSI/NSIS on Windows, deb/AppImage on Linux, and dmg on
+macOS) are planned for Milestone 5.
+
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| `Ctrl+O` | Open a media file |
+| `Space` / `K` | Play or pause |
+| `F` / double-click video | Toggle fullscreen (`Esc` exits) |
+| `←` / `→` | Seek −5 s / +5 s (`Shift`: ±10 s) |
+| `↑` / `↓` | Increase or decrease volume |
+| `M` | Mute or unmute |
+| `[` / `]` / `Backspace` | Decrease speed / increase speed / normal speed |
+| `,` / `.` | Previous or next frame while paused |
+| `S` | Save a snapshot to Pictures |
+| `A` / `V` | Cycle audio or subtitle track |
 
 ## Architecture
 
-BatPlayer renders video into a **native child window** and layers the Tauri
-webview **transparently on top** of it, so the HTML control bar overlays the
-video (mpv's `wid` embedding):
+BatPlayer renders video in a native child window and layers the Tauri webview
+over it. mpv renders into the child window through its `wid` embedding, while
+the webview provides the controls and overlays.
 
-```
+```text
 ┌─ Tauri window ──────────────────────────────┐
 │  ┌─ WebView (transparent HTML UI) ───────┐  │
 │  │  controls, overlays, idle watermark   │  │
@@ -31,177 +126,98 @@ video (mpv's `wid` embedding):
 └─────────────────────────────────────────────┘
 ```
 
-- The child surface is created in `src-tauri/src/platform/` (one module per
-  OS) and is kept at the bottom of the window z-order, sized to the client
-  area on every resize.
-- **The window itself is opaque; only the webview is transparent.** Tauri's
-  window-level `transparent: true` on Windows goes through tao's DWM
-  blur-behind mode (`DwmEnableBlurBehindWindow` with an empty region), under
-  which native child windows do not composite at all — the video surface
-  would be invisible. BatPlayer instead builds the window and webview
-  separately (`Window::builder` + `Window::add_child`, the multiwebview API
-  behind Tauri's `unstable` feature) with `.transparent(true)` on the
-  **webview** only. This is the same approach Tauri's own `add_child` docs
-  reference for native-content layering.
-- mpv runs on its own thread behind a single `Player` struct
-  (`src-tauri/src/player/`) and exposes Tauri commands (`commands.rs`) plus
-  `player-event` property events; the UI never touches mpv directly.
-
-
-## Prerequisites
-
-Common: [Node.js](https://nodejs.org) (LTS), [Rust](https://rustup.rs)
-(stable, MSVC toolchain on Windows).
-
-- **libmpv (all platforms):** the DLL/import library are **not** committed;
-  fetch them once with a dedicated script or a package manager:
-
-  ```bash
-  # Windows (downloads the mpv dev build and generates mpv.lib from its
-  # exports with dumpbin + lib.exe, needs 7-Zip and Visual Studio's tools):
-  powershell -ExecutionPolicy Bypass -File scripts/fetch-mpv.ps1
-  ```
-
-  On Linux/macOS the system package takes over (see below); the vendored
-  files are only used on Windows.
-
-- **Windows:** Visual Studio Build Tools with the "Desktop development with
-  C++" workload, 7-Zip (only for the fetch script), and the WebView2 runtime
-  (preinstalled on Windows 10/11).
-- **Linux:** Tauri prerequisites for your distro (see
-  [tauri prerequisites](https://tauri.app/start/prerequisites/)); also
-  `libmpv` (Debian/Ubuntu: `sudo apt install libmpv-dev`,
-  Fedora: `sudo dnf install mpv-devel`, Arch: `sudo pacman -S mpv`).
-- **macOS:** Xcode Command Line Tools (`xcode-select --install`). Note: mpv
-  embedding and window transparency are **not yet tested on macOS** (the
-  build enables Tauri's `macos-private-api` feature, required for
-  `transparent: true`).
-
-## Build and run
-
-```bash
-npm install
-powershell -ExecutionPolicy Bypass -File scripts/fetch-mpv.ps1   # Windows only, once
-
-# Development (hot reload):
-npm run tauri dev
-
-# Production build (MSI/NSIS on Windows, deb/AppImage on Linux, dmg on macOS —
-# packaging is configured in Milestone 5):
-npm run tauri build
-
-# Checks:
-npm run check        # svelte-check
-npm run build        # vite production build
-cargo clippy --all-targets -- -D warnings   # from src-tauri/
-cargo fmt                     # from src-tauri/
-
-# End-to-end check (Windows): builds, plays a generated test clip, and
-# pixel-checks the window screenshots — see "Autotest" below.
-powershell -ExecutionPolicy Bypass -File scripts/autotest.ps1
-```
+- The native child surface is created in `src-tauri/src/platform/`, with a
+  module for each OS. It stays at the bottom of the window's z-order and is
+  resized to the client area.
+- The window is opaque; only the webview is transparent. On Windows,
+  window-level transparency uses DWM blur-behind behavior that prevents native
+  child windows from compositing correctly. BatPlayer builds the window and
+  webview separately with `Window::builder` and `Window::add_child` (Tauri's
+  multiwebview API behind the `unstable` feature), applying transparency to
+  the webview only.
+- mpv runs on its own thread behind a `Player` struct in
+  `src-tauri/src/player/`. The UI talks to it through Tauri commands and
+  `player-event` property events; it does not access mpv directly.
 
 ## Autotest
 
-`scripts/autotest.ps1` plays a generated 2.5 s test clip (raw Y4M, no ffmpeg
-required) in the debug build and pixel-checks that everything landed on
-screen:
+On Windows, `scripts/autotest.ps1` builds the debug app, plays a generated
+2.5-second Y4M test clip (no ffmpeg required), and checks screenshots. It
+verifies the captured mpv frame's size, variance, and chroma, then checks that
+the app window shows the bat logo, menu bar, play button, and composited video.
 
-1. generates `sample.y4m` (rolling luminance ramp + cycling RGB block),
-2. runs the app with `BATPLAYER_AUTOTEST_FILE` pointing at it,
-3. collects the mpv `screenshot-to-file` frame via
-   `BATPLAYER_AUTOTEST_SHOT` and verifies size, variance and chroma,
-4. captures the app window and checks the bat logo, menu bar, play button
-   and the composited video surface.
+Run it with:
 
-The same hooks are handy for manual debugging:
-
-```
-BATPLAYER_AUTOTEST_FILE=<media>   auto-play this file after startup
-BATPLAYER_AUTOTEST_SHOT=<file>    dump an mpv screenshot into this path
-BATPLAYER_MPV_LOG=<file>          write a verbose mpv log
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/autotest.ps1
 ```
 
-They are no-ops without the env variables and are compiled out of release
-builds.
+The following environment variables can also be used for manual debugging:
 
-## Keyboard shortcuts
-
-| Key | Action |
+| Variable | Purpose |
 | --- | --- |
-| `Ctrl+O` | Open a media file |
-| `Space` / `K` | Play / pause |
-| `F` / double-click video | Toggle fullscreen (`Esc` leaves) |
-| `←` / `→` | Seek −5 s / +5 s (with `Shift`: ±10 s) |
-| `↑` / `↓` | Louder / quieter |
-| `M` | Mute |
-| `[` / `]` / `Backspace` | Slower / faster / normal speed |
-| `,` / `.` | Frame back / forward while paused |
-| `S` | Save snapshot to Pictures |
-| `A` / `V` | Cycle audio / subtitle track |
+| `BATPLAYER_AUTOTEST_FILE` | Automatically play this media file at startup |
+| `BATPLAYER_AUTOTEST_SHOT` | Save an mpv screenshot to this path |
+| `BATPLAYER_MPV_LOG` | Write a verbose mpv log to this path |
+
+These hooks are inactive unless configured and are compiled out of release
+builds.
 
 ## Project structure
 
-```
+```text
 src-tauri/
-├─ build.rs          # links libmpv from src-tauri/mpv and copies the DLL
+├─ build.rs          # Links libmpv and copies the DLL
 ├─ src/
-│  ├─ main.rs        # entry point
-│  ├─ lib.rs         # Tauri builder/setup (surface + player + commands)
-│  ├─ platform/      # native video surface per OS (windows.rs, macos.rs, linux.rs)
-│  ├─ commands.rs    # Tauri commands (load/seek/volume/tracks/snapshot)
-│  ├─ player/        # mpv wrapper, observed properties, event thread
-│  ├─ autotest.rs    # env-var driven e2e hooks (debug builds only)
-│  ├─ settings.rs    # persisted config (Milestone 4)
-│  └─ history.rs     # resume positions, recent files (Milestone 3)
-├─ mpv/              # vendored libmpv (gitignored; fetch-mpv.ps1 fills it)
+│  ├─ main.rs        # Application entry point
+│  ├─ lib.rs         # Tauri setup: surface, player, and commands
+│  ├─ platform/      # Native video surface per OS
+│  ├─ commands.rs    # Tauri commands for playback and media controls
+│  ├─ player/        # mpv wrapper, observed properties, and event thread
+│  ├─ autotest.rs    # Debug-build environment-variable test hooks
+│  ├─ settings.rs    # Persisted configuration (planned for Milestone 4)
+│  └─ history.rs     # Resume positions and recent files (planned for Milestone 3)
+├─ mpv/              # Vendored libmpv files (gitignored; populated by fetch script)
 src/
-├─ api/              # typed invoke/listen bindings to the Rust commands
-├─ components/       # Svelte components (control bar, logo, topbar/)
-├─ stores/           # playback state, chrome auto-hide, window flags
-├─ i18n/             # locale files (English first)
-├─ styles/           # CSS variables + global styles
-└─ utils/            # actions, dialogs/media openers, formatting
+├─ api/              # Typed invoke/listen bindings to Rust commands
+├─ components/       # Svelte UI components
+├─ stores/           # Playback state, auto-hide, and window flags
+├─ i18n/              # Locale files
+├─ styles/           # CSS variables and global styles
+└─ utils/            # Actions, dialogs, media openers, and formatting
 scripts/
-├─ fetch-mpv.ps1     # vendor libmpv (Windows)
-└─ autotest.ps1      # end-to-end visual check (Windows, debug build)
+├─ fetch-mpv.ps1     # Fetches libmpv on Windows
+└─ autotest.ps1      # Windows debug-build visual check
 ```
 
 ## Roadmap
 
-1. ~~**Skeleton** — Tauri v2 project, transparent webview, empty native video
-   child window~~ ✅
-2. ~~**Playback** — embed mpv via `wid`, open/play/seek/volume/fullscreen,
-   property events to the UI~~ ✅
-3. **Full MVP UI — history** — persisted `history.rs`: recent files in the
-   File menu, resume-where-you-stopped on reopen, track menus polish
-4. **Playlist and settings** — file queue with next/previous, auto-advance,
-   loop & shuffle (`stores/queue`), a persistent `settings.rs` powering a
-   settings panel (light/dark/system theme, language switching, defaults)
-5. **Packaging and CI** for Linux, Windows, macOS
-6. **Polish** — video adjustments, A-B loop, media info, i18n, themes,
-   Windows SMTC media keys (lock-screen/keyboard playback control)
+1. **Skeleton** — Tauri v2 project, transparent webview, and empty native video
+   child window. **Complete.**
+2. **Playback** — mpv embedding, open/play/seek/volume/fullscreen, and property
+   events to the UI. **Complete.**
+3. **Full MVP UI and history** — Recent files in the File menu, resume playback
+   when reopening a file, and track menu polish.
+4. **Playlist and settings** — Queue with next/previous, auto-advance, loop and
+   shuffle; persistent settings for theme, language, and defaults.
+5. **Packaging and CI** — Linux, Windows, and macOS.
+6. **Polish** — Video adjustments, A-B loop, media info, internationalization,
+   themes, and Windows SMTC media keys.
 
-## Platform notes / known quirks
+## Platform notes
 
-- **Windows** (current dev platform, verified): the video surface is a plain
-  `WS_CHILD` window below the WebView2 host; the webview's own transparency
-  composites the native surface correctly, and resize tracking was verified
-  programmatically. Known quirk: window-level transparency must NOT be used
-  (see Architecture above). DPI scaling: the surface sizes itself from the
-  parent's client rect, which is already in physical pixels, so mixed-DPI is
-  handled by the existing resize path (multi-monitor DPI-change edge cases
-  get exercised in Milestone 3).
-- **Linux:** mpv `wid` embedding requires X11/XWayland. A Wayland session
-  will need to run the app under XWayland (e.g. `GDK_BACKEND=x11`); this is
-  documented and handled in Milestone 2.
-- **macOS:** NSView manipulation must happen on the main thread; the video
-  surface is a stub there until Milestone 2. Untested.
+- **Windows:** The video surface is a `WS_CHILD` window below the WebView2 host.
+  Webview transparency composites the native surface, and resize tracking has
+  been verified. Avoid window-level transparency (see [Architecture](#architecture)).
+  The surface uses the parent's client rectangle in physical pixels; additional
+  multi-monitor DPI edge cases are planned for Milestone 3.
+- **Linux:** mpv `wid` embedding requires X11 or XWayland. Under Wayland, run
+  through XWayland (for example, with `GDK_BACKEND=x11`).
+- **macOS:** NSView changes must happen on the main thread. Embedding and
+  transparency are currently untested; the native surface is still a stub.
 
-## Licensing
+## License
 
-BatPlayer is MIT-licensed. From Milestone 2 it dynamically links **libmpv**
-(LGPL or GPL depending on build), which is kept compliant by dynamic linking;
-license notices are shipped with the installers. See [LICENSE](LICENSE).
-#   B a t P l a y e r  
- 
+BatPlayer is MIT-licensed; see [LICENSE](LICENSE). From Milestone 2 onward, it
+dynamically links libmpv, which is LGPL or GPL depending on the build.
+Installer license notices are planned as part of packaging.
