@@ -34,6 +34,8 @@
   },
   "menu": {
     "openFile": "Open File…",
+    "openRecent": "Open Recent",
+    "clearRecentFiles": "Clear Recent Files",
     "exit": "Exit",
     "playPause": "Play / Pause",
     "stop": "Stop",
@@ -76,8 +78,11 @@
   "osd": {
     "volume": "Volume",
     "muted": "Muted",
+    "speed": "Speed",
     "audio": "Audio",
     "subtitle": "Subtitle",
+    "paused": "Paused",
+    "playing": "Playing",
     "off": "off"
   },
   "notices": {

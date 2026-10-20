@@ -15,10 +15,13 @@
     toggleMute,
     togglePlayPause,
   } from "../../utils/actions";
+  import { clearHistory } from "../../api/history";
   import { chromeHidden, menuOpen, pinChrome } from "../../stores/chrome";
+  import { recent } from "../../stores/history";
   import { displayTitle, mediaLoaded, muted, showNotice } from "../../stores/player";
   import { closeWindow, fullscreen, maximized, minimizeWindow, toggleFullscreen, toggleMaximize } from "../../stores/window";
   import { pickAndAttachSubtitle, pickAndOpenMedia } from "../../utils/media";
+  import { openMediaPath } from "../../utils/media";
   import { buildMenus, type MenuCallbacks, type MenuDefinition, type MenuEntry } from "./menus";
 
   /** Id of the open flyout; false when the menubar is closed. */
@@ -28,7 +31,12 @@
 
   const menus: MenuDefinition[] = $derived.by(() =>
     buildMenus(
-      { hasMedia: $mediaLoaded, muted: $muted, fullscreen: $fullscreen },
+      {
+        hasMedia: $mediaLoaded,
+        muted: $muted,
+        fullscreen: $fullscreen,
+        recentFiles: $recent,
+      },
       menuCallbacks(),
     ),
   );
@@ -36,6 +44,8 @@
   function menuCallbacks(): MenuCallbacks {
     return {
       openFile: () => void pickAndOpenMedia(),
+      openRecent: (path) => void openMediaPath(path),
+      clearRecent: () => void clearHistory(),
       exit: closeWindow,
       playPause: () => void togglePlayPause(),
       stop: () => void stopPlayback(),
@@ -135,8 +145,12 @@
       closeMenu();
       menuButtonFor(id)?.focus();
     } else if (event.key === "Tab") {
+      // Close, but hand the focus back to the menubar button instead of
+      // dropping it on <body>.
       event.preventDefault();
+      const id = openMenu;
       closeMenu();
+      menuButtonFor(id)?.focus();
     }
   }
 
@@ -279,7 +293,7 @@
     gap: 2px;
     padding-left: 10px;
     z-index: 30;
-    background: linear-gradient(to bottom, rgba(6, 6, 8, 0.94), rgba(10, 10, 13, 0.8));
+    background: linear-gradient(to bottom, rgba(6, 6, 8, 0.94), rgba(10, 10, 13, 0.88));
     border-bottom: 1px solid var(--border);
     backdrop-filter: blur(16px);
     color: var(--text-dim);
@@ -350,7 +364,7 @@
     max-width: 40%;
     font-size: 12.5px;
     letter-spacing: 0.01em;
-    color: var(--text-faint);
+    color: var(--text-dim);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -398,5 +412,16 @@
   .control.close:hover {
     background: #e81123;
     color: #ffffff;
+  }
+
+  /* Reduced motion: the bar still appears and vanishes, just without travel. */
+  @media (prefers-reduced-motion: reduce) {
+    .top-bar {
+      transition: opacity var(--transition-fast);
+    }
+
+    .top-bar.hidden {
+      transform: none;
+    }
   }
 </style>

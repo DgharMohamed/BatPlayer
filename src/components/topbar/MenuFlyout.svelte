@@ -79,13 +79,13 @@
   }
 
   .menu-item:disabled {
-    opacity: 0.4;
+    opacity: 0.6;
     cursor: default;
   }
 
   .hint {
-    font-size: 11.5px;
-    color: var(--text-faint);
+    font-size: 12px;
+    color: var(--text-dim);
     letter-spacing: 0.02em;
   }
 

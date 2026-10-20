@@ -2,6 +2,7 @@
   import { expoOut } from "svelte/easing";
   import { fly } from "svelte/transition";
 
+  import { t } from "../i18n";
   import { speed } from "../stores/player";
   import { formatSpeed } from "../utils/time";
 
@@ -20,7 +21,7 @@
     }}
     out:fly={{ duration: 120 }}
   >
-    {formatSpeed($speed)}
+    <span class="sr-only">{t("osd.speed")} </span>{formatSpeed($speed)}
   </div>
 {/if}
 

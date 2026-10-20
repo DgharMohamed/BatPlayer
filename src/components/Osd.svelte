@@ -20,47 +20,72 @@
   }
 </script>
 
-{#if $osd !== null}
-  <!-- Visual echo of actions whose controls already expose the same state. -->
-  <div
-    class="osd"
-    aria-hidden="true"
-    transition:fly={{
-      x: reducedMotion.matches ? 0 : -10,
-      duration: reducedMotion.matches ? 140 : 180,
-      easing: expoOut,
-    }}
-  >
-    {#if $osd.kind === "volume"}
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 9v6h4l5 5V4L7 9H3zM16.5 12a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" />
-      </svg>
-      <span>{t("osd.volume")} {$osd.value}%</span>
-    {:else if $osd.kind === "muted"}
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          d="M16.5 12a4.5 4.5 0 0 0-2.5-4v2.2l2.5 2.5V12zM19 12a7.5 7.5 0 0 1-.54 2.64l1.51 1.51A9.8 9.8 0 0 0 21 12a9.78 9.78 0 0 0-7-8.77v2.06A7.86 7.86 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25A7.5 7.5 0 0 1 12 19.5a7.57 7.57 0 0 1-.76-.05v2.03A9.8 9.8 0 0 0 12 21.5 9.78 9.78 0 0 0 19.73 21 21 21 0 0 1 4.27 3zM12 4 9.91 6.09 12 8.18V4z"
-        />
-      </svg>
-      <span>{t("osd.muted")}</span>
-    {:else if $osd.kind === "speed"}
-      <span class="value">{formatSpeed($osd.speed)}</span>
-    {:else if $osd.kind === "seek"}
-      <span>{formatDelta($osd.delta)} → {formatTime($osd.target)}</span>
-    {:else if $osd.kind === "audio"}
-      <span>{trackLabel(t("osd.audio"), $osd.current, $osd.total)}</span>
-    {:else}
-      <span>{trackLabel(t("osd.subtitle"), $osd.current, $osd.total)}</span>
-    {/if}
-  </div>
-{/if}
+<!--
+  Persistent polite live region: the message swaps in place inside a node
+  that is always present, so screen readers announce every shortcut-driven
+  state change. The plate is the visual echo; its icons stay silent.
+-->
+<div class="osd-slot" role="status" aria-atomic="true">
+  {#if $osd !== null}
+    <div
+      class="osd"
+      transition:fly={{
+        x: reducedMotion.matches ? 0 : -10,
+        duration: reducedMotion.matches ? 140 : 180,
+        easing: expoOut,
+      }}
+    >
+      {#if $osd.kind === "volume"}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 9v6h4l5 5V4L7 9H3zM16.5 12a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" />
+        </svg>
+        <span>{t("osd.volume")} {$osd.value}%</span>
+      {:else if $osd.kind === "muted"}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M16.5 12a4.5 4.5 0 0 0-2.5-4v2.2l2.5 2.5V12zM19 12a7.5 7.5 0 0 1-.54 2.64l1.51 1.51A9.8 9.8 0 0 0 21 12a9.78 9.78 0 0 0-7-8.77v2.06A7.86 7.86 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25A7.5 7.5 0 0 1 12 19.5a7.57 7.57 0 0 1-.76-.05v2.03A9.8 9.8 0 0 0 12 21.5 9.78 9.78 0 0 0 19.73 21 21 21 0 0 1 4.27 3zM12 4 9.91 6.09 12 8.18V4z"
+          />
+        </svg>
+        <span>{t("osd.muted")}</span>
+      {:else if $osd.kind === "speed"}
+        <span class="value"
+          ><span class="sr-only">{t("osd.speed")} </span>{formatSpeed($osd.speed)}</span
+        >
+      {:else if $osd.kind === "seek"}
+        <span
+          >{formatDelta($osd.delta)} <span aria-hidden="true">→</span> {formatTime(
+            $osd.target,
+          )}</span
+        >
+      {:else if $osd.kind === "audio"}
+        <span>{trackLabel(t("osd.audio"), $osd.current, $osd.total)}</span>
+      {:else if $osd.kind === "paused" || $osd.kind === "playing"}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          {#if $osd.kind === "playing"}
+            <path d="M8 5v14l11-7z" />
+          {:else}
+            <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+          {/if}
+        </svg>
+        <span>{t($osd.kind)}</span>
+      {:else}
+        <span>{trackLabel(t("osd.subtitle"), $osd.current, $osd.total)}</span>
+      {/if}
+    </div>
+  {/if}
+</div>
 
 <style>
-  .osd {
+  /* The slot stays in the DOM as the live region; only the plate animates. */
+  .osd-slot {
     position: fixed;
     top: 56px;
     left: 18px;
     z-index: 25;
+    pointer-events: none;
+  }
+
+  .osd {
     display: flex;
     align-items: center;
     gap: 9px;
@@ -72,7 +97,6 @@
     font-size: 13px;
     font-variant-numeric: tabular-nums;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-    pointer-events: none;
   }
 
   .osd svg {

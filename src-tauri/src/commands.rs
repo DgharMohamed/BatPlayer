@@ -1,7 +1,8 @@
 //! Tauri commands: the frontend's only entry point into the player.
 
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
+use crate::history::{History, RecentEntry};
 use crate::player::{Player, PlayerError, TrackInfo};
 
 type PlayerResult = Result<(), String>;
@@ -12,9 +13,39 @@ fn map(err: PlayerError) -> String {
     err.to_string()
 }
 
+/// Notifies the webview that the history list changed, so the File menu
+/// re-renders. Failures only leave a stale menu until the next change.
+fn notify_history_changed(app: &tauri::AppHandle) {
+    if let Err(err) = app.emit("history-changed", ()) {
+        eprintln!("failed to notify the history change: {err}");
+    }
+}
+
 #[tauri::command]
-pub fn load_file(path: String, player: State<'_, Player>) -> PlayerResult {
-    player.load_file(&path).map_err(map)
+pub fn load_file(
+    path: String,
+    app: tauri::AppHandle,
+    player: State<'_, Player>,
+    history: State<'_, History>,
+) -> PlayerResult {
+    player.load_file(&path).map_err(map)?;
+    // A successful load bumps the file to the top of "Open Recent" —
+    // whoever triggered it (dialog, drag-and-drop, recent entry).
+    history.record(&path);
+    notify_history_changed(&app);
+    Ok(())
+}
+
+/// The newest first list shown under File ▸ "Open Recent".
+#[tauri::command]
+pub fn recent_files(history: State<'_, History>) -> Vec<RecentEntry> {
+    history.recent()
+}
+
+#[tauri::command]
+pub fn clear_history(app: tauri::AppHandle, history: State<'_, History>) {
+    history.clear();
+    notify_history_changed(&app);
 }
 
 #[tauri::command]

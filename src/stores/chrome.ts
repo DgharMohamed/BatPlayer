@@ -1,11 +1,15 @@
 /**
  * Chrome visibility state shared by the top bar and the control bar: both
- * bars fade away after a moment without interaction while a file is playing,
+ * bars fade away after a moment without interaction while a file is playing
+ * — in fullscreen also while it is paused, to keep the picture chrome-free —
  * and stay pinned while a menu is open or the pointer rests on the controls.
  */
 import { get, writable } from "svelte/store";
 
-import { eofReached, idle, paused } from "./player";const AUTOHIDE_INACTIVITY_MS = 2400;
+import { eofReached, idle, paused } from "./player";
+import { fullscreen } from "./window";
+
+const AUTOHIDE_INACTIVITY_MS = 2400;
 
 /** Identifier of the open menu flyout (e.g. "media"), or false if none. */
 export const menuOpen = writable<string | false>(false);
@@ -15,10 +19,19 @@ export const chromeHidden = writable(false);
 
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let pinned = false;
+let focusPinned = false;
 
-/** Auto-hide only makes sense while a file actively plays and no menu is up. */
-function canHide(): boolean {
-  return pinned || Boolean(get(menuOpen)) || get(paused) || get(idle) || get(eofReached);
+/**
+ * Holds that keep the bars up: direct interaction (pointer resting on a bar,
+ * keyboard focus inside one), an open menu, or no running playback to watch.
+ * Paused only holds in the windowed layout — a fullscreen pause echoes on
+ * the OSD instead, so the chrome slides away like during playback.
+ */
+function hasHold(): boolean {
+  if (pinned || focusPinned || Boolean(get(menuOpen)) || get(idle) || get(eofReached)) {
+    return true;
+  }
+  return get(paused) && !get(fullscreen);
 }
 
 /** Cancels the countdown and keeps the bars visible. */
@@ -32,16 +45,33 @@ export function pinChrome(value: boolean): void {
   }
 }
 
+/**
+ * Keyboard focus inside a bar holds it open too, so Tab never lands on a
+ * control that the inactivity timer slid out of view.
+ */
+export function pinChromeFocus(value: boolean): void {
+  if (focusPinned === value) {
+    return;
+  }
+  focusPinned = value;
+  if (value) {
+    chromeHidden.set(false);
+    disarmHide();
+  } else {
+    keepChromeVisible();
+  }
+}
+
 /** Rearms the countdown (called on every pointer move or interaction). */
 export function keepChromeVisible(): void {
-  if (pinned) {
+  if (pinned || focusPinned) {
     return;
   }
   chromeHidden.set(false);
   disarmHide();
-  if (!canHide()) {
+  if (!hasHold()) {
     hideTimer = setTimeout(() => {
-      if (!canHide()) {
+      if (!hasHold()) {
         chromeHidden.set(true);
       }
     }, AUTOHIDE_INACTIVITY_MS);
@@ -50,7 +80,7 @@ export function keepChromeVisible(): void {
 
 /** Immediately hides the bars (e.g. after pressing play and moving on). */
 export function hideChrome(): void {
-  if (!canHide()) {
+  if (!hasHold()) {
     chromeHidden.set(true);
   }
 }
@@ -62,16 +92,12 @@ function disarmHide(): void {
   }
 }
 
-// Whenever the player stops actively playing (pause flips, EOF parks the
-// decoder with `keep-open`, or the file unloads), the bars come back instead
-// of leaving the video fullscreen-hidden forever.
-for (const store of [paused, idle, eofReached]) {
-  store.subscribe(() => {
-    disarmHide();
-    if (!canHide()) {
-      chromeHidden.set(false);
-    } else {
-      keepChromeVisible();
-    }
-  });
+// Every playback/hold flip re-arms the countdown immediately, so state
+// changes never wait for the next pointer move: a file loading or unloading,
+// EOF parking the decoder with `keep-open`, a fullscreen flip (pressing `f`
+// with the mouse parked must still slide the chrome away, and leaving
+// fullscreen shows the bars again), and a fullscreen pause — which releases
+// its hold in `hasHold` and now auto-hides like playing does.
+for (const store of [paused, idle, eofReached, fullscreen]) {
+  store.subscribe(() => keepChromeVisible());
 }

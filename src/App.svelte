@@ -9,7 +9,8 @@
   import SpeedChip from "./components/SpeedChip.svelte";
   import TopBar from "./components/topbar/TopBar.svelte";
   import { t } from "./i18n";
-  import { keepChromeVisible } from "./stores/chrome";
+  import { keepChromeVisible, pinChromeFocus } from "./stores/chrome";
+  import { bindHistory } from "./stores/history";
   import {
     bindPlayerEvents,
     idle,
@@ -42,6 +43,7 @@
     void (async () => {
       cleanups.push(await bindPlayerEvents());
       cleanups.push(await bindWindowState());
+      cleanups.push(await bindHistory());
       cleanups.push(
         await getCurrentWebview().onDragDropEvent((event) => {
           switch (event.payload.type) {
@@ -78,12 +80,26 @@
     return (
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement &&
+        (target.isContentEditable || target.getAttribute("role") === "textbox"))
+    );
+  }
+
+  /** Buttons, menu items and links activate on Space natively — never hijack it. */
+  function ownsSpace(target: EventTarget | null): boolean {
+    return (
+      target instanceof Element &&
+      target.closest("button, [role='menuitem'], a[href]") !== null
     );
   }
 
   function onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented || isTypingTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === " " && ownsSpace(event.target)) {
       return;
     }
 
@@ -195,8 +211,33 @@
   function onStageDblclick(): void {
     void toggleFullscreen();
   }
+
+  /**
+   * Keyboard focus inside a bar holds it open (Pointer focus after a click
+   * must not, or the bars would never auto-hide during playback).
+   */
+  function onFocusIn(event: FocusEvent): void {
+    const target = event.target;
+    pinChromeFocus(
+      target instanceof Element &&
+        target.matches(":focus-visible") &&
+        target.closest(".top-bar, .control-bar") !== null,
+    );
+  }
+
+  function onFocusOut(event: FocusEvent): void {
+    const target = event.target;
+    if (target instanceof Element && target.closest(".top-bar, .control-bar") !== null) {
+      pinChromeFocus(false);
+    }
+  }
 </script>
-<svelte:window onkeydown={onKeydown} onpointermove={keepChromeVisible} />
+<svelte:window
+  onkeydown={onKeydown}
+  onpointermove={keepChromeVisible}
+  onfocusin={onFocusIn}
+  onfocusout={onFocusOut}
+/>
 
 <!--
   The video fills the whole client area (native child window behind this
@@ -208,7 +249,7 @@
 
   <main class="stage" aria-label={t("video.areaLabel")} ondblclick={onStageDblclick}>
     <div class="idle-mark" class:visible={$idle}>
-      <BatLogo size={104} />
+      <span class="idle-logo"><BatLogo size={104} /></span>
       <p class="idle-hint">{t("idle.hint")}</p>
     </div>
 
@@ -216,7 +257,7 @@
       <div
         class="notice"
         class:error={$notice.kind === "error"}
-        role="status"
+        role={$notice.kind === "error" ? "alert" : "status"}
       >
         {$notice.text}
       </div>
@@ -262,8 +303,14 @@
   }
 
   .idle-mark.visible {
-    opacity: 0.5;
+    opacity: 1;
     transform: none;
+  }
+
+  /* The artwork itself stays a faint watermark; the hint next to it carries
+     the actual contrast (dimming the whole mark buried it below 3:1). */
+  .idle-logo {
+    opacity: 0.5;
   }
 
   .idle-hint {
@@ -275,7 +322,7 @@
 
   .notice {
     position: fixed;
-    bottom: 94px;
+    bottom: 82px;
     left: 50%;
     transform: translateX(-50%);
     max-width: min(560px, 80vw);
@@ -322,6 +369,18 @@
     to {
       opacity: 1;
       transform: translate(-50%, 0);
+    }
+  }
+
+  /* Reduced motion: state changes stay, travel goes. */
+  @media (prefers-reduced-motion: reduce) {
+    .idle-mark {
+      transform: none;
+      transition: opacity var(--transition-fast);
+    }
+
+    .notice {
+      animation: none;
     }
   }
 </style>

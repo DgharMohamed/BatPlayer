@@ -99,6 +99,9 @@ export function handlePlayerEvent(event: PlayerEvent): void {
     loading.set(false);
     mediaLoaded.set(true);
     idle.set(false);
+    // A freshly opened file always auto-plays; mpv emits no `pause` change
+    // when it was already false, so sync the mirror here too.
+    paused.set(false);
     notice.set(null);
     return;
   }

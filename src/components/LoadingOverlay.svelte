@@ -29,13 +29,6 @@
     cancelling = true;
     void stopPlayback();
   }
-
-  /** Space cancels the load instead of reaching the play/pause shortcut. */
-  function onCancelKeydown(event: KeyboardEvent): void {
-    if (event.key === " ") {
-      event.stopPropagation();
-    }
-  }
 </script>
 
 {#if visible}
@@ -55,7 +48,6 @@
         type="button"
         disabled={cancelling}
         onclick={cancelLoad}
-        onkeydown={onCancelKeydown}
       >
         {t(cancelling ? "loading.cancelling" : "loading.cancel")}
       </button>

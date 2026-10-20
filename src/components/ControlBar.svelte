@@ -100,6 +100,7 @@
       value={dragValue ?? $currentTime}
       style="--progress: {playedPercent}%"
       aria-label={t("controls.seekBar")}
+      aria-valuetext={timeLabel}
       disabled={!workable}
       onpointermove={onSeekHover}
       onpointerleave={onSeekLeave}
@@ -183,6 +184,7 @@
         value={$volume}
         style="--progress: {volumePercent}%"
         aria-label={t("controls.volume")}
+        aria-valuetext={`${$volume}%`}
         disabled={!workable}
         oninput={onVolumeInput}
       />
@@ -256,7 +258,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 8px 14px 10px;
+    padding: 6px 14px 6px;
     z-index: 20;
     background: linear-gradient(to top, rgba(5, 5, 7, 0.97), rgba(10, 10, 13, 0.86));
     border-top: 1px solid var(--border);
@@ -289,8 +291,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: none;
     border-radius: var(--radius-sm);
@@ -303,8 +305,8 @@
   }
 
   .icon-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     fill: currentColor;
   }
 
@@ -324,19 +326,19 @@
   }
 
   .play-btn {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
     color: var(--accent);
   }
 
   .play-btn svg {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
   }
 
   .time-label {
     margin-left: 8px;
-    font-size: 13px;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
     color: var(--text-dim);
     white-space: nowrap;
@@ -350,7 +352,7 @@
   input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-    height: 24px;
+    height: 20px;
     background-color: transparent;
     background-image: linear-gradient(
       to right,
@@ -438,7 +440,18 @@
   }
 
   .volume-bar {
-    width: 92px;
+    width: 76px;
     margin: 0 4px;
+  }
+
+  /* Reduced motion: the bar still appears and vanishes, just without travel. */
+  @media (prefers-reduced-motion: reduce) {
+    .control-bar {
+      transition: opacity var(--transition-fast);
+    }
+
+    .control-bar.hidden {
+      transform: none;
+    }
   }
 </style>

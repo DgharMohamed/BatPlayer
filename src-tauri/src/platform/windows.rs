@@ -1,7 +1,8 @@
 //! Windows video surface: an empty native child window that mpv will render
-//! into via the `wid` option (Milestone 2). It is created with a near-black
-//! background and kept at the bottom of the window's z-order so the
-//! transparent webview above it lets the video show through.
+//! into via the `wid` option (Milestone 2). It fills the whole parent client
+//! area — the translucent HTML bars simply overlay the picture — is created
+//! with a near-black background, and is kept at the bottom of the window's
+//! z-order so the transparent webview above it lets the video show through.
 
 use std::ffi::c_void;
 
@@ -46,8 +47,10 @@ impl VideoSurface {
         Ok(Self { parent, child })
     }
 
-    /// Fits the surface to the parent's client area, re-asserting that it
-    /// stays below the webview.
+    /// Fits the surface to the parent's full client area. The HTML bars are
+    /// translucent overlays above it, so chrome-free playback (bars slid
+    /// away, e.g. fullscreen) shows the picture edge to edge. Also
+    /// re-asserts that the surface stays below the webview.
     pub fn resize_to_fit(&self) -> Result<(), Error> {
         let parent = HWND(self.parent as *mut c_void);
         let child = HWND(self.child as *mut c_void);
@@ -58,6 +61,7 @@ impl VideoSurface {
             let mut rect = RECT::default();
             GetClientRect(parent, &mut rect)
                 .map_err(|err| Error::Platform(format!("GetClientRect failed: {err}")))?;
+
             SetWindowPos(
                 child,
                 Some(HWND_BOTTOM),

@@ -173,10 +173,14 @@ scripts/
    child window~~ ✅
 2. ~~**Playback** — embed mpv via `wid`, open/play/seek/volume/fullscreen,
    property events to the UI~~ ✅
-3. **Full MVP UI** — playlist panel, track menus proper, resume position
-4. **Playlist and settings**
+3. **Full MVP UI — history** — persisted `history.rs`: recent files in the
+   File menu, resume-where-you-stopped on reopen, track menus polish
+4. **Playlist and settings** — file queue with next/previous, auto-advance,
+   loop & shuffle (`stores/queue`), a persistent `settings.rs` powering a
+   settings panel (light/dark/system theme, language switching, defaults)
 5. **Packaging and CI** for Linux, Windows, macOS
-6. **Polish** — video adjustments, A-B loop, media info, i18n, themes
+6. **Polish** — video adjustments, A-B loop, media info, i18n, themes,
+   Windows SMTC media keys (lock-screen/keyboard playback control)
 
 ## Platform notes / known quirks
 

@@ -6,6 +6,7 @@
 //! [`commands`] and listens for [`player::PlayerEvent`]s.
 
 mod commands;
+pub mod history;
 pub mod platform;
 mod player;
 
@@ -36,6 +37,8 @@ pub fn run() {
             commands::add_subtitle_file,
             commands::frame_step,
             commands::screenshot,
+            commands::recent_files,
+            commands::clear_history,
         ])
         .setup(|app| {
             // The window itself must stay OPAQUE: on Windows, Tauri's
@@ -68,6 +71,10 @@ pub fn run() {
             // mpv owns the surface from here on; its event thread forwards
             // property changes to the webview as `player-event`s.
             app.manage(Player::new(surface.wid()?, app.handle().clone())?);
+
+            // Persisted recent-files state for the File menu (Milestone 3).
+            let data_dir = app.path().app_data_dir()?;
+            app.manage(history::History::open(&data_dir));
 
             // Optional env-var driven self-test (scripts/autotest.ps1).
             #[cfg(debug_assertions)]

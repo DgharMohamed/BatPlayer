@@ -108,6 +108,11 @@ impl Player {
 
     pub fn load_file(&self, path: &str) -> Result<(), PlayerError> {
         self.mpv.command("loadfile", &[path])?;
+        // A freshly opened file always auto-plays. `pause` is sticky in mpv
+        // (keep-open leaves it set at end of file), so clear it explicitly;
+        // when it was already false no change event fires, hence the matching
+        // `paused` sync on `fileLoaded` in the frontend.
+        self.mpv.set_property("pause", false)?;
         Ok(())
     }
 

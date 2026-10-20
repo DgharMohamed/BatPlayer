@@ -6,9 +6,12 @@
  * `muted`, `fullscreen`) flips.
  */
 import { t } from "../../i18n";
+import type { RecentEntry } from "../../api/history";
 
 export interface MenuCallbacks {
   openFile(): void;
+  openRecent(path: string): void;
+  clearRecent(): void;
   exit(): void;
   playPause(): void;
   stop(): void;
@@ -30,6 +33,8 @@ export interface MenuState {
   hasMedia: boolean;
   muted: boolean;
   fullscreen: boolean;
+  /** Recently opened paths, newest first (may be empty). */
+  recentFiles: RecentEntry[];
 }
 
 export type MenuEntry =
@@ -48,9 +53,36 @@ export interface MenuDefinition {
   items: MenuEntry[];
 }
 
+/** Last path segment, the flat label the recent list shows. */
+function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+/**
+ * Flat "Open Recent" section: a caption row, the newest files (clicking
+ * one reopens and re-records it) and the "Clear" action. Rendered only
+ * when the list is non-empty.
+ */
+function recentItems(entries: RecentEntry[], a: MenuCallbacks): MenuEntry[] {
+  return [
+    {
+      kind: "item",
+      label: t("menu.openRecent"),
+      disabled: true,
+      action: (): void => {},
+    },
+    ...entries.map((entry) => ({
+      kind: "item" as const,
+      label: baseName(entry.path),
+      action: () => a.openRecent(entry.path),
+    })),
+    { kind: "item", label: t("menu.clearRecentFiles"), action: a.clearRecent },
+  ];
+}
+
 /** Menu definitions in classic player (VLC) order. */
 export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[] {
-  const { hasMedia, muted, fullscreen } = state;
+  const { hasMedia, muted, fullscreen, recentFiles } = state;
 
   return [
     {
@@ -58,6 +90,7 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
       label: t("menus.media"),
       items: [
         { kind: "item", label: t("menu.openFile"), hint: "Ctrl+O", action: a.openFile },
+        ...(recentFiles.length > 0 ? recentItems(recentFiles, a) : []),
         { kind: "separator" },
         { kind: "item", label: t("menu.exit"), hint: "Alt+F4", action: a.exit },
       ],

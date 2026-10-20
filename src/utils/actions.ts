@@ -66,7 +66,14 @@ function replayFromStart(): Promise<void> {
 }
 
 export function togglePlayPause(): Promise<void> {
-  return get(eofReached) ? replayFromStart() : report(playPause);
+  if (get(eofReached)) {
+    return replayFromStart();
+  }
+  // Chrome-free fullscreen hides the paused state, so echo the intended one
+  // on the OSD — optimistic, like the volume and mute shortcuts.
+  const willPause = !get(paused);
+  showOsd(willPause ? { kind: "paused" } : { kind: "playing" });
+  return report(playPause);
 }
 
 export const stopPlayback = (): Promise<void> => report(stop);

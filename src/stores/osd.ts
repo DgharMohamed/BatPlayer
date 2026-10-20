@@ -1,13 +1,16 @@
 /**
  * Transient on-stage feedback ("OSD") for actions whose result would be
- * invisible otherwise: volume steps, mute, speed, seek jumps and track
- * cycling. The plate itself lives in `components/Osd.svelte`.
+ * invisible otherwise: volume steps, mute, speed, seek jumps, track
+ * cycling and play/pause flips (which count when the chrome is hidden in
+ * fullscreen). The plate itself lives in `components/Osd.svelte`.
  */
 import { writable } from "svelte/store";
 
 export type OsdContent =
   | { kind: "volume"; value: number }
   | { kind: "muted" }
+  | { kind: "paused" }
+  | { kind: "playing" }
   | { kind: "speed"; speed: number }
   | { kind: "seek"; delta: number; target: number }
   | { kind: "audio"; current: number; total: number }
