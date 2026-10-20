@@ -203,3 +203,5 @@ scripts/
 BatPlayer is MIT-licensed. From Milestone 2 it dynamically links **libmpv**
 (LGPL or GPL depending on build), which is kept compliant by dynamic linking;
 license notices are shipped with the installers. See [LICENSE](LICENSE).
+#   B a t P l a y e r  
+ 
