@@ -19,6 +19,9 @@ pub use macos::VideoSurface;
 #[cfg(target_os = "windows")]
 pub use windows::VideoSurface;
 
+#[cfg(target_os = "windows")]
+pub use windows::attach_resize_ring;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// A platform windowing error.

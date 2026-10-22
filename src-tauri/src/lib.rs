@@ -73,6 +73,16 @@ pub fn run() {
             let surface = platform::VideoSurface::attach(&window)?;
             surface.resize_to_fit()?;
 
+            // The runtime's frameless drag-resize ring only attaches for
+            // windows that own their webview content; ours is added with
+            // add_child, so attach the equivalent ring ourselves. Without it
+            // the transparent webview eats every WM_NCHITTEST at the window
+            // edges: no edge-drag resizing, no Snap-by-drag. Degradable, so a
+            // failure is logged instead of failing the boot.
+            if let Err(err) = platform::attach_resize_ring(&window) {
+                eprintln!("failed to attach the frameless resize ring: {err}");
+            }
+
             // mpv owns the surface from here on; its event thread forwards
             // property changes to the webview as `player-event`s. The
             // persisted volume/mute is applied before any event can arrive.
