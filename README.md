@@ -1,6 +1,6 @@
-# BatPlayer 🦇
+# BatPlayer
 
-<img src="src-tauri/icons/icon.png" align="right" width="104" alt="BatPlayer app icon">
+<img src="src-tauri/icons/icon.png" align="right" width="160" alt="BatPlayer app icon">
 
 BatPlayer is a modern, cross-platform media player built with Tauri v2 and
 libmpv. It pairs mpv playback with a dark, minimal interface and an
