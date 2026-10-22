@@ -6,6 +6,7 @@
   import BatLogo from "./components/BatLogo.svelte";
   import LoadingOverlay from "./components/LoadingOverlay.svelte";
   import Osd from "./components/Osd.svelte";
+  import PlaylistPanel from "./components/PlaylistPanel.svelte";
   import SpeedChip from "./components/SpeedChip.svelte";
   import TopBar from "./components/topbar/TopBar.svelte";
   import { t } from "./i18n";
@@ -21,7 +22,10 @@
   import { bindWindowState, exitFullscreen, toggleFullscreen } from "./stores/window";
   import {
     cycleAudioTrack,
+    cycleLoop,
     cycleSubtitleTrack,
+    nextTrack,
+    prevTrack,
     stepFrame,
     resetSpeed,
     seekRelative,
@@ -30,9 +34,16 @@
     stopPlayback,
     takeSnapshot,
     toggleMute,
+    togglePlaylist,
     togglePlayPause,
+    toggleShuffle,
   } from "./utils/actions";
-  import { openMediaPath, pickAndOpenMedia } from "./utils/media";
+  import {
+    openMediaPath,
+    pickAndOpenMedia,
+    playDroppedSources,
+    startProgressSaver,
+  } from "./utils/media";
 
   /** True while files are dragged over the window (drop preview). */
   let draggingFiles = $state(false);
@@ -44,6 +55,8 @@
       cleanups.push(await bindPlayerEvents());
       cleanups.push(await bindWindowState());
       cleanups.push(await bindHistory());
+      // Resume saves on a timer so a crash mid-file still resumes nearby.
+      cleanups.push(startProgressSaver());
       cleanups.push(
         await getCurrentWebview().onDragDropEvent((event) => {
           switch (event.payload.type) {
@@ -55,10 +68,19 @@
               break;
             case "drop": {
               draggingFiles = false;
-              const [path] = event.payload.paths;
-              if (path !== undefined) {
-                void openMediaPath(path);
-              }
+              const paths = event.payload.paths;
+              void (async () => {
+                // Files and folders alike expand Rust-side into a sorted
+                // media queue; a plain file-only drop keeps this behavior.
+                if (await playDroppedSources(paths)) {
+                  return;
+                }
+                // Subtitle (or unknown) drops keep the attach/fail notices.
+                const [first] = paths;
+                if (first !== undefined) {
+                  await openMediaPath(first);
+                }
+              })();
               break;
             }
             case "leave":
@@ -103,17 +125,69 @@
       return;
     }
 
+    const playingNow = $mediaLoaded && !$idle;
+
+    // Ctrl/meta bindings (VLC: Ctrl+O open, Ctrl+Up/Down volume,
+    // Ctrl+Left/Right large jumps, Ctrl+Alt even larger ones).
     if (event.ctrlKey || event.metaKey) {
-      if (event.code === "KeyO" && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        void pickAndOpenMedia();
+      switch (event.code) {
+        case "KeyO":
+          if (!event.shiftKey && !event.altKey) {
+            event.preventDefault();
+            void pickAndOpenMedia();
+          }
+          return;
+        case "KeyL":
+          if (!event.altKey) {
+            event.preventDefault();
+            void togglePlaylist();
+          }
+          return;
+        case "ArrowUp":
+          if (!event.altKey) {
+            event.preventDefault();
+            void stepVolume(5);
+          }
+          return;
+        case "ArrowDown":
+          if (!event.altKey) {
+            event.preventDefault();
+            void stepVolume(-5);
+          }
+          return;
+        case "ArrowLeft":
+        case "ArrowRight": {
+          const delta = event.code === "ArrowLeft" ? -1 : 1;
+          const jump = event.altKey ? 300 : 60;
+          if (playingNow && !event.shiftKey) {
+            event.preventDefault();
+            void seekRelative(delta * jump);
+          }
+          return;
+        }
+        default:
+          return;
       }
+    }
+
+    // VLC keys match lowercase letters only; normalizing here also fixes
+    // Shift+letter chords never firing (Shift+S snapshot, Shift+K pause).
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+
+    // Arrows are handled before the letter switch: size depends on Shift
+    // (extrashort ±3s) and Alt (short ±10s); plain is the BatPlayer ±5s.
+    if (key === "ArrowLeft" || key === "ArrowRight") {
+      if (!playingNow) {
+        return;
+      }
+      event.preventDefault();
+      const delta = key === "ArrowLeft" ? -1 : 1;
+      const jump = event.shiftKey ? 3 : event.altKey ? 10 : 5;
+      void seekRelative(delta * jump);
       return;
     }
 
-    const playingNow = $mediaLoaded && !$idle;
-
-    switch (event.key) {
+    switch (key) {
       case " ":
       case "k":
         event.preventDefault();
@@ -141,7 +215,17 @@
           void takeSnapshot();
         }
         return;
+      case "e":
+        // BatPlayer alias: stop (VLC parity for the classic "end" mnemonic).
+        void stopPlayback();
+        return;
       case "a":
+        if (playingNow) {
+          void cycleAudioTrack();
+        }
+        return;
+      case "b":
+        // VLC: audio track cycle binds to b rather than a.
         if (playingNow) {
           void cycleAudioTrack();
         }
@@ -151,6 +235,19 @@
           void cycleSubtitleTrack();
         }
         return;
+      case "n":
+        void nextTrack();
+        return;
+      case "p":
+        void prevTrack();
+        return;
+      case "l":
+        event.preventDefault();
+        void cycleLoop();
+        return;
+      case "r":
+        void toggleShuffle();
+        return;
       case "[":
         if (playingNow) {
           void stepSpeed(-0.25);
@@ -159,6 +256,18 @@
       case "]":
         if (playingNow) {
           void stepSpeed(0.25);
+        }
+        return;
+      case "=":
+      case "+":
+        // VLC's +/- jump the rate by 1 in either direction.
+        if (playingNow) {
+          void stepSpeed(1);
+        }
+        return;
+      case "-":
+        if (playingNow) {
+          void stepSpeed(-1);
         }
         return;
       case ",":
@@ -174,24 +283,6 @@
       case "Backspace":
         if (playingNow) {
           void resetSpeed();
-        }
-        return;
-      case "ArrowLeft":
-        if (playingNow && !event.shiftKey) {
-          event.preventDefault();
-          void seekRelative(-5);
-        } else if (playingNow) {
-          event.preventDefault();
-          void seekRelative(-10);
-        }
-        return;
-      case "ArrowRight":
-        if (playingNow && !event.shiftKey) {
-          event.preventDefault();
-          void seekRelative(5);
-        } else if (playingNow) {
-          event.preventDefault();
-          void seekRelative(10);
         }
         return;
       case "ArrowUp":
@@ -210,6 +301,20 @@
   /** Double-clicking the video toggles fullscreen, as in every player. */
   function onStageDblclick(): void {
     void toggleFullscreen();
+  }
+
+  /**
+   * Wheel over the video steps the volume (a BatPlayer extension, noted in
+   * the keyboard table): hands never leave the playback area. Only discrete
+   * notches react, so touchpads do not sweep the volume away. No
+   * preventDefault: the stage cannot scroll, and Svelte's delegated wheel
+   * listeners are passive.
+   */
+  function onStageWheel(event: WheelEvent): void {
+    if (Math.abs(event.deltaY) < 10) {
+      return;
+    }
+    void stepVolume(event.deltaY < 0 ? 2 : -2);
   }
 
   /**
@@ -247,7 +352,12 @@
 <div class="app">
   <TopBar />
 
-  <main class="stage" aria-label={t("video.areaLabel")} ondblclick={onStageDblclick}>
+  <main
+    class="stage"
+    aria-label={t("video.areaLabel")}
+    ondblclick={onStageDblclick}
+    onwheel={onStageWheel}
+  >
     <div class="idle-mark" class:visible={$idle}>
       <span class="idle-logo"><BatLogo size={104} /></span>
       <p class="idle-hint">{t("idle.hint")}</p>
@@ -266,6 +376,7 @@
 
   <LoadingOverlay />
   <ControlBar />
+  <PlaylistPanel />
   <Osd />
   <SpeedChip />
 

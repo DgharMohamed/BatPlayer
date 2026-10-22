@@ -3,6 +3,8 @@
   import {
     cycleAudioTrack,
     cycleSubtitleTrack,
+    nextTrack,
+    prevTrack,
     report,
     seekAbsolute,
     stopPlayback,
@@ -22,6 +24,7 @@
     paused,
     volume,
   } from "../stores/player";
+  import { loopMode, playlistIndex, playlistItems } from "../stores/playlist";
   import { fullscreen, toggleFullscreen } from "../stores/window";
   import { formatTime } from "../utils/time";
 
@@ -31,6 +34,11 @@
   let hoverRatio = $state<number | null>(null);
 
   let workable = $derived($mediaLoaded && !$idle);
+  /** Next enabled unless the un-looped queue's end is reached. */
+  let canNext = $derived(
+    $playlistItems.length > 0 &&
+      ($playlistIndex < $playlistItems.length - 1 || $loopMode === "all" || $playlistIndex < 0),
+  );
   const timeLabel = $derived(
     `${formatTime(dragValue ?? $currentTime)} / ${formatTime($duration)}`,
   );
@@ -117,6 +125,23 @@
   <div class="button-row">
     <div class="group">
       <button
+        class="icon-btn"
+        type="button"
+        disabled={$playlistItems.length === 0}
+        title={t("controls.previous")}
+        aria-label={t("controls.previous")}
+        onclick={() => void prevTrack()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          {#if $playlistIndex > 0}
+            <path d="M6 6h2v12H6zm3.5 6 5.5 4V8z" />
+          {:else}
+            <path d="M6 6h2v12H6zM20 6l-8.5 6 8.5 6z" />
+          {/if}
+        </svg>
+      </button>
+
+      <button
         class="icon-btn play-btn"
         type="button"
         disabled={!workable}
@@ -137,6 +162,23 @@
             <path d="M8 5v14l11-7z" />
           {:else}
             <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+          {/if}
+        </svg>
+      </button>
+
+      <button
+        class="icon-btn"
+        type="button"
+        disabled={!canNext}
+        title={t("controls.next")}
+        aria-label={t("controls.next")}
+        onclick={() => void nextTrack()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          {#if canNext && $playlistIndex < $playlistItems.length - 1}
+            <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
+          {:else}
+            <path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z" />
           {/if}
         </svg>
       </button>

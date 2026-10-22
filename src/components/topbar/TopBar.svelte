@@ -5,27 +5,40 @@
   import {
     cycleAudioTrack,
     cycleSubtitleTrack,
+    nextTrack,
+    prevTrack,
     resetSpeed,
     seekRelative,
+    setLoopMode,
     stepFrame,
     stepSpeed,
     stepVolume,
     stopPlayback,
     takeSnapshot,
     toggleMute,
+    togglePlaylist,
     togglePlayPause,
+    toggleShuffle,
   } from "../../utils/actions";
   import { clearHistory } from "../../api/history";
   import { chromeHidden, menuOpen, pinChrome } from "../../stores/chrome";
   import { recent } from "../../stores/history";
+  import { loopMode, playPaths, playlistOpen, shuffleEnabled } from "../../stores/playlist";
   import { displayTitle, mediaLoaded, muted, showNotice } from "../../stores/player";
   import { closeWindow, fullscreen, maximized, minimizeWindow, toggleFullscreen, toggleMaximize } from "../../stores/window";
-  import { pickAndAttachSubtitle, pickAndOpenMedia } from "../../utils/media";
-  import { openMediaPath } from "../../utils/media";
+  import {
+    isMediaPath,
+    openMediaPath,
+    pickAndAttachSubtitle,
+    pickAndOpenFolder,
+    pickAndOpenMedia,
+  } from "../../utils/media";
   import { buildMenus, type MenuCallbacks, type MenuDefinition, type MenuEntry } from "./menus";
 
   /** Id of the open flyout; false when the menubar is closed. */
   let openMenu = $state<string | false>(false);
+  /** The open flyout is right-anchored (would otherwise overflow the edge). */
+  let slotFlipped = $state(false);
   let barEl = $state<HTMLElement | null>(null);
   let paneEl = $state<HTMLDivElement | null>(null);
 
@@ -35,6 +48,9 @@
         hasMedia: $mediaLoaded,
         muted: $muted,
         fullscreen: $fullscreen,
+        loop: $loopMode,
+        shuffle: $shuffleEnabled,
+        playlistOpen: $playlistOpen,
         recentFiles: $recent,
       },
       menuCallbacks(),
@@ -44,11 +60,20 @@
   function menuCallbacks(): MenuCallbacks {
     return {
       openFile: () => void pickAndOpenMedia(),
-      openRecent: (path) => void openMediaPath(path),
+      // Queues media files from a whole folder, replaced like any open.
+      openFolder: () => void pickAndOpenFolder(),
+      // Open Recent queues replace like a fresh open; subtitles attach.
+      openRecent: (path) => void (isMediaPath(path) ? playPaths([path]) : openMediaPath(path)),
       clearRecent: () => void clearHistory(),
       exit: closeWindow,
       playPause: () => void togglePlayPause(),
       stop: () => void stopPlayback(),
+      previous: () => void prevTrack(),
+      next: () => void nextTrack(),
+      loopPlaylist: () => void setLoopMode($loopMode === "all" ? "off" : "all"),
+      repeatCurrent: () => void setLoopMode($loopMode === "one" ? "off" : "one"),
+      toggleRandom: () => void toggleShuffle(),
+      togglePlaylist: () => void togglePlaylist(),
       seekBy: (seconds) => void seekRelative(seconds),
       frameStep: (direction) => void stepFrame(direction),
       changeSpeed: (delta) => void stepSpeed(delta),
@@ -74,6 +99,11 @@
     if (openMenu === id) {
       return;
     }
+    const button = menuButtonFor(id);
+    // Small windows: a left-anchored flyout under the last menus (Subtitle,
+    // Help) would overflow the right edge, so anchor those from the right.
+    slotFlipped =
+      button !== null && button.getBoundingClientRect().right + 260 > window.innerWidth;
     openMenu = id;
     menuOpen.set(id);
     pinChrome(true);
@@ -227,7 +257,11 @@
           {menu.label}
         </button>
         {#if openMenu === menu.id}
-          <div class="flyout-slot" bind:this={paneEl}>
+          <div
+            class="flyout-slot"
+            class:flipped={slotFlipped}
+            bind:this={paneEl}
+          >
             <MenuFlyout
               entries={menu.items}
               onpick={pick}
@@ -242,6 +276,22 @@
   <span class="window-title">
     {$displayTitle || t("app.name")}
   </span>
+
+  <button
+    class="control playlist-toggle"
+    class:armed={$playlistOpen}
+    type="button"
+    title={t("controls.playlist")}
+    aria-label={t("controls.playlist")}
+    aria-pressed={$playlistOpen}
+    onclick={() => void togglePlaylist()}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h7v-2H3v2zm14-10v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"
+      />
+    </svg>
+  </button>
 
   <div class="window-controls">
     <button
@@ -336,6 +386,12 @@
     left: 0;
   }
 
+  /* Small windows: anchor right instead of overflowing the edge. */
+  .flyout-slot.flipped {
+    left: auto;
+    right: 0;
+  }
+
   .menu-btn {
     height: 100%;
     padding: 0 10px;
@@ -371,6 +427,14 @@
     pointer-events: none;
   }
 
+  /* Small windows have no free middle ground between the menus and the
+     window controls: the title plate would overlap both, so it steps out. */
+  @media (max-width: 859px) {
+    .window-title {
+      display: none;
+    }
+  }
+
   .window-controls {
     display: flex;
     align-items: stretch;
@@ -397,6 +461,18 @@
     stroke: currentColor;
     stroke-width: 1;
     stroke-linecap: round;
+  }
+
+  /* The playlist toggle is a fill icon like the window buttons are strokes. */
+  .playlist-toggle svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .playlist-toggle.armed {
+    color: var(--accent);
   }
 
   .control:hover {

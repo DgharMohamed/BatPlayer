@@ -11,6 +11,10 @@ export type RecentEntry = {
   path: string;
   /** Unix milliseconds of the most recent open. */
   openedAt: number;
+  /** Resume point of the last session (seconds); 0 plays from the start. */
+  lastPosition: number;
+  /** Total duration of that session, 0 when unknown. */
+  lastDuration: number;
 };
 
 export const recentFiles = (): Promise<RecentEntry[]> => invoke("recent_files");

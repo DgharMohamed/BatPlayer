@@ -7,14 +7,21 @@
  */
 import { t } from "../../i18n";
 import type { RecentEntry } from "../../api/history";
+import type { LoopMode } from "../../stores/playlist";
 
 export interface MenuCallbacks {
   openFile(): void;
+  openFolder(): void;
   openRecent(path: string): void;
   clearRecent(): void;
   exit(): void;
   playPause(): void;
   stop(): void;
+  previous(): void;
+  next(): void;
+  loopPlaylist(): void;
+  repeatCurrent(): void;
+  toggleRandom(): void;
   seekBy(seconds: number): void;
   frameStep(direction: 1 | -1): void;
   changeSpeed(delta: number): void;
@@ -26,6 +33,7 @@ export interface MenuCallbacks {
   snapshot(): void;
   cycleSubtitle(): void;
   attachSubtitle(): void;
+  togglePlaylist(): void;
   about(): void;
 }
 
@@ -33,6 +41,12 @@ export interface MenuState {
   hasMedia: boolean;
   muted: boolean;
   fullscreen: boolean;
+  /** Loop mode of the queue ("off"/"all"/"one"). */
+  loop: LoopMode;
+  /** VLC "random" play order state. */
+  shuffle: boolean;
+  /** Playlist drawer visibility. */
+  playlistOpen: boolean;
   /** Recently opened paths, newest first (may be empty). */
   recentFiles: RecentEntry[];
 }
@@ -44,6 +58,8 @@ export type MenuEntry =
       hint?: string;
       action: () => void;
       disabled?: boolean;
+      /** Checked entries render a check mark and report via aria-checked. */
+      checked?: boolean;
     }
   | { kind: "separator" };
 
@@ -82,7 +98,7 @@ function recentItems(entries: RecentEntry[], a: MenuCallbacks): MenuEntry[] {
 
 /** Menu definitions in classic player (VLC) order. */
 export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[] {
-  const { hasMedia, muted, fullscreen, recentFiles } = state;
+  const { hasMedia, muted, fullscreen, loop, shuffle, playlistOpen, recentFiles } = state;
 
   return [
     {
@@ -90,6 +106,10 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
       label: t("menus.media"),
       items: [
         { kind: "item", label: t("menu.openFile"), hint: "Ctrl+O", action: a.openFile },
+        // VLC's Media ▸ "Open Folder…" queues the folder's media; this
+        // build's verifiable config carries no default hotkey for it, so
+        // the entry ships without a hint rather than a guessed key.
+        { kind: "item", label: t("menu.openFolder"), action: a.openFolder },
         ...(recentFiles.length > 0 ? recentItems(recentFiles, a) : []),
         { kind: "separator" },
         { kind: "item", label: t("menu.exit"), hint: "Alt+F4", action: a.exit },
@@ -109,8 +129,43 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.stop"),
+          hint: "E",
           disabled: !hasMedia,
           action: a.stop,
+        },
+        { kind: "separator" },
+        {
+          kind: "item",
+          label: t("menu.previous"),
+          hint: "P",
+          action: a.previous,
+        },
+        {
+          kind: "item",
+          label: t("menu.next"),
+          hint: "N",
+          action: a.next,
+        },
+        {
+          kind: "item",
+          label: t("menu.loopPlaylist"),
+          hint: "L (cycles)",
+          checked: loop === "all",
+          action: a.loopPlaylist,
+        },
+        {
+          kind: "item",
+          label: t("menu.repeatCurrent"),
+          hint: "L (cycles)",
+          checked: loop === "one",
+          action: a.repeatCurrent,
+        },
+        {
+          kind: "item",
+          label: t("menu.random"),
+          hint: "R",
+          checked: shuffle,
+          action: a.toggleRandom,
         },
         { kind: "separator" },
         {
@@ -118,14 +173,14 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
           label: t("menu.seekBackward"),
           hint: "Shift+Left",
           disabled: !hasMedia,
-          action: () => a.seekBy(-10),
+          action: () => a.seekBy(-3),
         },
         {
           kind: "item",
           label: t("menu.seekForward"),
           hint: "Shift+Right",
           disabled: !hasMedia,
-          action: () => a.seekBy(10),
+          action: () => a.seekBy(3),
         },
         {
           kind: "item",
@@ -145,20 +200,21 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.speedDown"),
-          hint: "[",
+          hint: "[ or -",
           disabled: !hasMedia,
           action: () => a.changeSpeed(-0.25),
         },
         {
           kind: "item",
           label: t("menu.speedUp"),
-          hint: "]",
+          hint: "] or +",
           disabled: !hasMedia,
           action: () => a.changeSpeed(+0.25),
         },
         {
           kind: "item",
           label: t("menu.resetSpeed"),
+          hint: "Backspace",
           disabled: !hasMedia,
           action: a.resetSpeed,
         },
@@ -216,6 +272,19 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
           hint: "S",
           disabled: !hasMedia,
           action: a.snapshot,
+        },
+      ],
+    },
+    {
+      id: "view",
+      label: t("menus.view"),
+      items: [
+        {
+          kind: "item",
+          label: t("menu.playlist"),
+          hint: "Ctrl+L",
+          checked: playlistOpen,
+          action: a.togglePlaylist,
         },
       ],
     },

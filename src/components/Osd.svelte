@@ -57,6 +57,12 @@
             $osd.target,
           )}</span
         >
+      {:else if $osd.kind === "loop"}
+        <span>{t("osd.loop")}: {t(`osd.loop_${$osd.mode}`)}</span>
+      {:else if $osd.kind === "random"}
+        <span>{t("osd.random")}: {t($osd.enabled ? "osd.on" : "osd.off")}</span>
+      {:else if $osd.kind === "text"}
+        <span>{$osd.text}</span>
       {:else if $osd.kind === "audio"}
         <span>{trackLabel(t("osd.audio"), $osd.current, $osd.total)}</span>
       {:else if $osd.kind === "paused" || $osd.kind === "playing"}

@@ -45,7 +45,29 @@ export type PlayerEvent =
   | { type: "fileLoaded" }
   | { type: "endFile"; error: string | null };
 
-export const loadFile = (path: string): Promise<void> => invoke("load_file", { path });
+/** The stored resume point of a file about to play, sent back by `load_file`. */
+export type ResumeHint = {
+  /** Seconds from the previous session; 0 plays from the start. */
+  position: number;
+  /** Total duration reported with it, 0 when unknown. */
+  duration: number;
+};
+
+/**
+ * Result of expanding mixed inputs (files and folders) into a media queue.
+ * `truncated` is set when the scan hit its file or depth cap in Rust.
+ */
+export type MediaResolve = {
+  files: string[];
+  truncated: boolean;
+};
+
+/** Expands dropped/picked files and folders into a flat media-file queue. */
+export const resolveMediaPaths = (paths: string[]): Promise<MediaResolve> =>
+  invoke("resolve_media_paths", { paths });
+
+export const loadFile = (path: string): Promise<ResumeHint> =>
+  invoke("load_file", { path });
 
 export const playPause = (): Promise<void> => invoke("play_pause");
 
@@ -77,6 +99,16 @@ export const frameStep = (direction: 1 | -1): Promise<void> =>
 
 /** Takes a snapshot and resolves with the absolute path of the written file. */
 export const screenshot = (): Promise<string> => invoke("screenshot");
+
+/**
+ * Best-effort progress save for resume-on-reopen (called before switching
+ * files and on a timer while playing; failures degrade silently in Rust).
+ */
+export const savePosition = (
+  path: string,
+  position: number,
+  duration: number,
+): Promise<void> => invoke("save_position", { path, position, duration });
 
 /**
  * Subscribes to player property and lifecycle events. The Rust side pushes

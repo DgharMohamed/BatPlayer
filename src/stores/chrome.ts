@@ -7,6 +7,7 @@
 import { get, writable } from "svelte/store";
 
 import { eofReached, idle, paused } from "./player";
+import { playlistOpen } from "./playlist";
 import { fullscreen } from "./window";
 
 const AUTOHIDE_INACTIVITY_MS = 2400;
@@ -28,7 +29,7 @@ let focusPinned = false;
  * the OSD instead, so the chrome slides away like during playback.
  */
 function hasHold(): boolean {
-  if (pinned || focusPinned || Boolean(get(menuOpen)) || get(idle) || get(eofReached)) {
+  if (pinned || focusPinned || Boolean(get(menuOpen)) || get(playlistOpen) || get(idle) || get(eofReached)) {
     return true;
   }
   return get(paused) && !get(fullscreen);
@@ -96,8 +97,9 @@ function disarmHide(): void {
 // changes never wait for the next pointer move: a file loading or unloading,
 // EOF parking the decoder with `keep-open`, a fullscreen flip (pressing `f`
 // with the mouse parked must still slide the chrome away, and leaving
-// fullscreen shows the bars again), and a fullscreen pause — which releases
-// its hold in `hasHold` and now auto-hides like playing does.
-for (const store of [paused, idle, eofReached, fullscreen]) {
+// fullscreen shows the bars again), a fullscreen pause — which releases
+// its hold in `hasHold` and now auto-hides like playing does — and the
+// playlist drawer, which holds the bars up for its duration.
+for (const store of [paused, idle, eofReached, fullscreen, playlistOpen]) {
   store.subscribe(() => keepChromeVisible());
 }

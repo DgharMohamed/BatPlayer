@@ -18,6 +18,7 @@ import {
   stop,
 } from "../api/player";
 import { get } from "svelte/store";
+import { t } from "../i18n";
 import {
   currentTime,
   duration,
@@ -28,7 +29,18 @@ import {
   speed,
   volume,
 } from "../stores/player";
+import {
+  advance,
+  loopMode,
+  playAt,
+  playlistItems,
+  playlistOpen,
+  setShuffle,
+  shuffleEnabled,
+  type LoopMode,
+} from "../stores/playlist";
 import { showOsd } from "../stores/osd";
+import { saveCurrentProgress } from "./media";
 
 const VOLUME_MAX = 130;
 const SPEED_MIN = 0.25;
@@ -76,7 +88,12 @@ export function togglePlayPause(): Promise<void> {
   return report(playPause);
 }
 
-export const stopPlayback = (): Promise<void> => report(stop);
+export const stopPlayback = async (): Promise<void> => {
+  // Stop counts as an interrupted session for VLC-style resume parity: the
+  // position at stop is what the next open continues from.
+  await saveCurrentProgress();
+  await report(stop);
+};
 
 /** Seeks by `seconds` and echoes the expected landing spot on the OSD. */
 export function seekRelative(seconds: number): Promise<void> {
@@ -147,3 +164,63 @@ export async function takeSnapshot(): Promise<void> {
     showNotice(String(error));
   }
 }
+
+/* Queue navigation & playlist modes (VLC's n/p/l/r). Kept out of the playlist
+ * store so shortcuts share one OSD echo path. */
+export async function nextTrack(): Promise<void> {
+  const target = advance(1);
+  if (target === null) {
+    return;
+  }
+  announceTrack(t("osd.next"), target);
+  await playAt(target);
+}
+
+export async function prevTrack(): Promise<void> {
+  const target = advance(-1);
+  if (target === null) {
+    return;
+  }
+  announceTrack(t("osd.previous"), target);
+  await playAt(target);
+}
+
+/** OSD echo naming the item the cursor jumped to. */
+function announceTrack(prefix: string, target: number): void {
+  const name = get(playlistItems)[target]?.name ?? "";
+  showOsd({
+    kind: "text",
+    text: name === "" ? prefix : `${prefix} — ${name}`,
+  });
+}
+
+const LOOP_CYCLE: LoopMode[] = ["off", "all", "one"];
+
+/** Keyboard `l`: steps through off → loop-all → repeat-one → off. */
+export function cycleLoop(): void {
+  const nextMode = LOOP_CYCLE[(LOOP_CYCLE.indexOf(get(loopMode)) + 1) % LOOP_CYCLE.length]!;
+  loopMode.set(nextMode);
+  showOsd({ kind: "loop", mode: nextMode });
+}
+
+/** (Menu toggles compute the target mode themselves.) */
+export function setLoopMode(mode: LoopMode): void {
+  if (get(loopMode) === mode) {
+    return;
+  }
+  loopMode.set(mode);
+  showOsd({ kind: "loop", mode });
+}
+
+/** Toggles random play; the store keeps the shuffled pool consistent. */
+export function toggleShuffle(): void {
+  const next = !get(shuffleEnabled);
+  setShuffle(next);
+  showOsd({ kind: "random", enabled: next });
+}
+
+/** Toggles the playlist drawer (no OSD: the panel itself is the feedback). */
+export function togglePlaylist(): void {
+  playlistOpen.update((open) => !open);
+}
+

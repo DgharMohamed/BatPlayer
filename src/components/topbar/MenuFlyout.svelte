@@ -23,10 +23,14 @@
       <button
         class="menu-item"
         type="button"
-        role="menuitem"
+        role={entry.checked !== undefined ? "menuitemcheckbox" : "menuitem"}
+        aria-checked={entry.checked === true}
         disabled={entry.disabled}
         onclick={() => onpick(entry)}
       >
+        {#if entry.checked !== undefined}
+          <span class="check" class:set={entry.checked} aria-hidden="true">✓</span>
+        {/if}
         <span class="label">{entry.label}</span>
         {#if entry.hint}
           <span class="hint">{entry.hint}</span>
@@ -67,6 +71,19 @@
     text-align: left;
     cursor: pointer;
     white-space: nowrap;
+  }
+
+  /* Check column keeps the labels aligned whether an entry is checked or not. */
+  .check {
+    width: 14px;
+    flex: none;
+    align-self: center;
+    color: transparent;
+    font-size: 12px;
+  }
+
+  .check.set {
+    color: var(--accent);
   }
 
   .menu-item:hover:enabled {

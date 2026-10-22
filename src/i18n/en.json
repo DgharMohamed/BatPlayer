@@ -30,15 +30,22 @@
     "audio": "Audio",
     "video": "Video",
     "subtitle": "Subtitle",
+    "view": "View",
     "help": "Help"
   },
   "menu": {
     "openFile": "Open File…",
+    "openFolder": "Open Folder…",
     "openRecent": "Open Recent",
     "clearRecentFiles": "Clear Recent Files",
     "exit": "Exit",
     "playPause": "Play / Pause",
     "stop": "Stop",
+    "previous": "Previous",
+    "next": "Next",
+    "loopPlaylist": "Loop playlist",
+    "repeatCurrent": "Repeat current",
+    "random": "Random",
     "seekForward": "Seek forward",
     "seekBackward": "Seek backward",
     "speedUp": "Faster playback",
@@ -56,6 +63,7 @@
     "snapshot": "Save snapshot",
     "subtitleTrack": "Next subtitle track",
     "loadSubtitle": "Add subtitle file…",
+    "playlist": "Playlist",
     "about": "About BatPlayer"
   },
   "controls": {
@@ -83,11 +91,32 @@
     "subtitle": "Subtitle",
     "paused": "Paused",
     "playing": "Playing",
+    "previous": "Previous",
+    "next": "Next",
+    "loop": "Loop",
+    "loop_off": "Playback order",
+    "loop_all": "Loop all",
+    "loop_one": "Repeat current",
+    "random": "Random",
+    "on": "on",
     "off": "off"
+  },
+  "playlist": {
+    "title": "Playlist",
+    "empty": "Nothing queued yet — drop media here",
+    "clear": "Clear playlist",
+    "remove": "Remove from playlist",
+    "shuffle": "Shuffle",
+    "loop": "Loop"
   },
   "notices": {
     "subtitleAttached": "subtitle attached",
     "subtitleNeedsMedia": "Open a media file before attaching subtitles",
-    "pickerFailed": "File picker failed"
+    "pickerFailed": "File picker failed",
+    "folderEmpty": "No playable media found in this folder",
+    "queueTruncated": "Queue scan stopped at its limit — some files were skipped",
+    "resolverFailed": "Folder scan failed",
+    "resumedAt": "Resuming playback from",
+    "skipped": "skipped — could not play"
   }
 }

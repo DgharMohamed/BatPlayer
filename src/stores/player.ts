@@ -6,9 +6,9 @@
  * never reach the frontend — the Rust side drops them — so this store resets
  * aggregate state itself on `startFile` / idle transitions.
  */
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 
-import { onPlayerEvent, type PlayerEvent } from "../api/player";
+import { seekTo, onPlayerEvent, type PlayerEvent } from "../api/player";
 
 /** Nothing is loaded; the idle mark shows and media controls lock. */
 export const idle = writable(true);
@@ -24,6 +24,9 @@ export const muted = writable(false);
 export const speed = writable(1);
 export const seekable = writable(false);
 export const displayTitle = writable("");
+/** Absolute path of the file the engine owns, null when nothing is loaded.
+ * The resume saver writes back to this file (unknown after a `stop` otherwise). */
+export const currentPath = writable<string | null>(null);
 /** Playback is parked at the end of the file (`keep-open`). */
 export const eofReached = writable(false);
 /** True between `start-file` and `file-loaded`. */
@@ -33,6 +36,57 @@ export const loadingName = writable("");
 
 /** Popup notice pinned to the bottom of the stage, or `null` when hidden. */
 export const notice = writable<{ kind: "error" | "info"; text: string } | null>(null);
+
+/**
+ * Resume slot: exactly one playback position may be waiting for its file to
+ * finish loading (opens are serialized through `openMediaPath`, so a FIFO
+ * would only carry a stale entry after a failed load).
+ */
+let pendingResume: { path: string; position: number } | null = null;
+
+/** Queues a resume position to seek to once the file has loaded. */
+export function queueResume(path: string, position: number): void {
+  pendingResume = { path, position };
+}
+
+/** Subscribers to end-of-file: the playlist advances from here. */
+const endFileListeners = new Set<(error: string | null) => void>();
+
+/** Registers a listener for the `end-file` boundary; returns the unlisten. */
+export function onEndFile(listener: (error: string | null) => void): () => void {
+  endFileListeners.add(listener);
+  return () => endFileListeners.delete(listener);
+}
+
+/** Applies the queued resume position, waiting for seekability if needed. */
+function applyResume(position: number): void {
+  const perform = async (): Promise<void> => {
+    try {
+      await seekTo(position);
+    } catch (error) {
+      // The file plays unresumed rather than failing the open.
+      showNotice(String(error), "error");
+    }
+  };
+  if (get(seekable)) {
+    void perform();
+    return;
+  }
+  // Streams report `seekable` around file-loaded; try briefly, then start
+  // from the beginning like an unresumable web stream would.
+  let giveUp: ReturnType<typeof setTimeout> | undefined;
+  const unsubscribe = seekable.subscribe((value) => {
+    if (!value) return;
+    if (giveUp !== undefined) {
+      clearTimeout(giveUp);
+    }
+    unsubscribe();
+    void perform();
+  });
+  giveUp = setTimeout(() => {
+    unsubscribe();
+  }, 3000);
+}
 
 /** Applies a single `player-event` payload to the stores. */
 export function handlePlayerEvent(event: PlayerEvent): void {
@@ -75,6 +129,8 @@ export function handlePlayerEvent(event: PlayerEvent): void {
           duration.set(0);
           seekable.set(false);
           displayTitle.set("");
+          currentPath.set(null);
+          pendingResume = null;
         } else {
           idle.set(false);
         }
@@ -103,13 +159,25 @@ export function handlePlayerEvent(event: PlayerEvent): void {
     // when it was already false, so sync the mirror here too.
     paused.set(false);
     notice.set(null);
+    // A queued resume position is consumed by exactly the file that queued
+    // it: this event is that file (the slot clears on end-file/idle too).
+    if (pendingResume !== null) {
+      const resume = pendingResume;
+      pendingResume = null;
+      applyResume(resume.position);
+    }
     return;
   }
 
   // endFile: with `keep-open`, a clean end of file only surfaces here.
   loading.set(false);
-  if (event.error) {
-    showNotice(event.error, "error");
+  pendingResume = null;
+  const { error } = event;
+  if (error) {
+    showNotice(error, "error");
+  }
+  for (const listener of [...endFileListeners]) {
+    listener(error);
   }
 }
 

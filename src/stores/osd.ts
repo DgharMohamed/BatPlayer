@@ -14,7 +14,11 @@ export type OsdContent =
   | { kind: "speed"; speed: number }
   | { kind: "seek"; delta: number; target: number }
   | { kind: "audio"; current: number; total: number }
-  | { kind: "subtitle"; current: number; total: number };
+  | { kind: "subtitle"; current: number; total: number }
+  /** Queue navigation / playlist mode feedback. */
+  | { kind: "loop"; mode: "off" | "all" | "one" }
+  | { kind: "random"; enabled: boolean }
+  | { kind: "text"; text: string };
 
 /** Current OSD message, or `null` while nothing is showing. */
 export const osd = writable<OsdContent | null>(null);
