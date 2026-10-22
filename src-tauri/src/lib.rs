@@ -7,8 +7,11 @@
 
 mod commands;
 pub mod history;
+pub(crate) mod media_scan;
 pub mod platform;
 mod player;
+pub(crate) mod settings;
+pub mod storage;
 
 use tauri::{
     LogicalPosition, LogicalSize, Manager, WebviewUrl, WindowEvent, webview::WebviewBuilder,
@@ -25,6 +28,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::load_file,
+            commands::save_position,
+            commands::resolve_media_paths,
             commands::play_pause,
             commands::stop,
             commands::seek_to,
@@ -69,12 +74,17 @@ pub fn run() {
             surface.resize_to_fit()?;
 
             // mpv owns the surface from here on; its event thread forwards
-            // property changes to the webview as `player-event`s.
-            app.manage(Player::new(surface.wid()?, app.handle().clone())?);
-
-            // Persisted recent-files state for the File menu (Milestone 3).
+            // property changes to the webview as `player-event`s. The
+            // persisted volume/mute is applied before any event can arrive.
             let data_dir = app.path().app_data_dir()?;
+            let settings = settings::Settings::open(&data_dir);
+            let audio = settings.audio();
+            app.manage(Player::new(surface.wid()?, app.handle().clone(), audio)?);
+
+            // Persisted recent-files state for the File menu (Milestone 3),
+            // plus the resume points and audio settings read above.
             app.manage(history::History::open(&data_dir));
+            app.manage(settings);
 
             // Optional env-var driven self-test (scripts/autotest.ps1).
             #[cfg(debug_assertions)]

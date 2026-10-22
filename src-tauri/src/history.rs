@@ -1,5 +1,6 @@
 //! Persisted file history: recently opened media paths for the File menu's
-//! "Open Recent" section (resume positions follow later milestones).
+//! "Open Recent" section, each carrying the resume point of its last
+//! session (where VLC's `qt-continue` picks playback back up).
 //!
 //! One small JSON document in the app-data directory, rewritten on every
 //! change through a temp file so a crash mid-write cannot truncate it.
@@ -15,9 +16,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::storage::write_and_swap;
+
 /// Entries beyond this count fall off the list entirely; the File menu
 /// displays at most the newest few.
 const KEEP: usize = 20;
+
+/// Positions closer to the start than this mean "not really started": the
+/// next open plays from the beginning again.
+const MIN_RESUME_POSITION: f64 = 5.0;
+/// Positions beyond this share of the duration mean "watched to the end":
+/// the next open starts over.
+const RESUME_END_RATIO: f64 = 0.95;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentEntry {
@@ -25,6 +35,13 @@ pub struct RecentEntry {
     pub path: String,
     /// Unix milliseconds of the most recent open.
     pub opened_at: u64,
+    /// Playback position (seconds) of the last session; 0 resumes from the
+    /// start. Older documents without these fields deserialize as 0.
+    #[serde(default)]
+    pub last_position: f64,
+    /// Total duration (seconds) reported along with it, 0 when unknown.
+    #[serde(default)]
+    pub last_duration: f64,
 }
 
 /// Shared, mutex-guarded history managed by Tauri and touched by the
@@ -56,19 +73,59 @@ impl History {
     }
 
     /// Records an open of `path`: deduplicates, moves the file to the front
-    /// and caps the list at [`KEEP`]. Persisted immediately; IO problems
-    /// still keep the change in memory.
+    /// and caps the list at [`KEEP`]. An existing entry carries its resume
+    /// point along — a re-open must not forget progress made since the
+    /// first open. Persisted immediately; IO problems still keep the change
+    /// in memory.
     pub fn record(&self, path: &str) {
         let mut entries = self.lock();
+        let (last_position, last_duration) = entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .map_or((0.0, 0.0), |entry| {
+                (entry.last_position, entry.last_duration)
+            });
         entries.retain(|entry| entry.path != path);
         entries.insert(
             0,
             RecentEntry {
                 path: path.to_string(),
                 opened_at: now_ms(),
+                last_position,
+                last_duration,
             },
         );
         entries.truncate(KEEP);
+        self.save(&entries);
+    }
+
+    /// The resume point stored for `path`: `(position, duration)`, `(0, 0)`
+    /// when the path is not listed (or has no recorded progress).
+    pub fn resume_point(&self, path: &str) -> (f64, f64) {
+        self.lock()
+            .iter()
+            .find(|entry| entry.path == path)
+            .map_or((0.0, 0.0), |entry| {
+                (entry.last_position, entry.last_duration)
+            })
+    }
+
+    /// Updates the resume point of the entry for `path`. Progress outside
+    /// usable range (barely past the start, or effectively at the end of a
+    /// known duration) normalizes back to "start over", mirroring resume
+    /// players in general and keeping finished videos from resuming at the
+    /// credits. Unknown paths are ignored: they were never opened here.
+    pub fn update_position(&self, path: &str, position: f64, duration: f64) {
+        let mut entries = self.lock();
+        let Some(entry) = entries.iter_mut().find(|entry| entry.path == path) else {
+            return;
+        };
+        let (next_position, next_duration) = normalize_position(position, duration);
+        if entry.last_position == next_position && entry.last_duration == next_duration {
+            return;
+        }
+        entry.last_position = next_position;
+        entry.last_duration = next_duration;
         self.save(&entries);
     }
 
@@ -94,7 +151,9 @@ impl History {
     /// Recovers a poisoned mutex instead of panicking commands: the list
     /// may briefly lag, but the player keeps running.
     fn lock(&self) -> MutexGuard<'_, Vec<RecentEntry>> {
-        self.entries.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Rewrites the document through a temp file, replacing old data.
@@ -109,21 +168,25 @@ impl History {
             }
         };
         let temp = self.file.with_extension("json.tmp");
-        write_and_swap(&temp, &self.file, body);
+        write_and_swap("the file history", &temp, &self.file, body);
     }
 }
 
-/// Writes `body` to `temp`, then swaps it over `target`. The remove-first
-/// dance exists because `fs::rename` refuses to replace a file on Windows.
-fn write_and_swap(temp: &Path, target: &Path, body: String) {
-    if let Err(err) = fs::write(temp, body) {
-        eprintln!("failed to save the file history: {err}");
-        return;
+/// Maps a raw playback position to its stored resume point. A finite,
+/// positive position below [`MIN_RESUME_POSITION`], or one past
+/// [`RESUME_END_RATIO`] of a known duration, becomes "start over". An
+/// unknown duration keeps the position; the next open still resumes.
+fn normalize_position(position: f64, duration: f64) -> (f64, f64) {
+    if !position.is_finite() || !(duration.is_finite()) {
+        return (0.0, 0.0);
     }
-    let _ = fs::remove_file(target);
-    if let Err(err) = fs::rename(temp, target) {
-        eprintln!("failed to save the file history: {err}");
+    let position = f64::max(position, 0.0);
+    let duration = f64::max(duration, 0.0);
+    let watched_to_end = duration > 0.0 && position > duration * RESUME_END_RATIO;
+    if position < MIN_RESUME_POSITION || watched_to_end {
+        return (0.0, duration);
     }
+    (position, duration)
 }
 
 /// Unix milliseconds of "now", 0 if the clock is before the epoch.
@@ -254,5 +317,97 @@ mod tests {
         history.clear();
         assert!(history.recent().is_empty());
         assert!(History::open(&dir).recent().is_empty());
+    }
+
+    #[test]
+    fn resume_point_defaults_to_zero() {
+        let dir = scratch("resume-default");
+        let history = History::open(&dir);
+        assert_eq!(history.resume_point("C:\\never-opened.mkv"), (0.0, 0.0));
+
+        let a = dir.join("a.mkv");
+        touch(&a);
+        history.record(a.to_str().unwrap());
+        assert_eq!(history.resume_point(a.to_str().unwrap()), (0.0, 0.0));
+    }
+
+    #[test]
+    fn record_preserves_an_existing_resume_point() {
+        let dir = scratch("resume-keep");
+        let a = dir.join("a.mkv");
+        touch(&a);
+        let history = History::open(&dir);
+        history.record(a.to_str().unwrap());
+        history.update_position(a.to_str().unwrap(), 300.0, 600.0);
+        // Re-opening (e.g. from Open Recent) must not forget progress.
+        history.record(a.to_str().unwrap());
+        assert_eq!(history.resume_point(a.to_str().unwrap()), (300.0, 600.0));
+    }
+
+    #[test]
+    fn update_position_stores_usable_progress() {
+        let dir = scratch("resume-store");
+        let history = History::open(&dir);
+        history.record("C:\\a.mkv");
+        history.update_position("C:\\a.mkv", 123.0, 600.0);
+        assert_eq!(history.resume_point("C:\\a.mkv"), (123.0, 600.0));
+    }
+
+    /// Below 5s, past 95% of the duration, or scrubbed wild: resume resets.
+    #[test]
+    fn update_position_normalizes_edge_progress() {
+        let dir = scratch("resume-edge");
+        let history = History::open(&dir);
+        history.record("C:\\a.mkv");
+        history.update_position("C:\\a.mkv", 123.0, 600.0);
+
+        // Barely past the start: start over.
+        history.update_position("C:\\a.mkv", 4.0, 600.0);
+        assert_eq!(history.resume_point("C:\\a.mkv"), (0.0, 600.0));
+
+        // Past 95%: effectively finished, start over.
+        history.update_position("C:\\a.mkv", 580.0, 600.0);
+        assert_eq!(history.resume_point("C:\\a.mkv"), (0.0, 600.0));
+
+        // Negative or NaN positions never stick.
+        history.update_position("C:\\a.mkv", -3.0, 600.0);
+        assert_eq!(history.resume_point("C:\\a.mkv"), (0.0, 600.0));
+        history.update_position("C:\\a.mkv", f64::NAN, 600.0);
+        assert_eq!(history.resume_point("C:\\a.mkv"), (0.0, 0.0));
+    }
+
+    #[test]
+    fn update_position_ignores_unknown_paths() {
+        let dir = scratch("resume-unknown");
+        let history = History::open(&dir);
+        history.update_position("C:\\a.mkv", 60.0, 600.0);
+        assert!(history.recent().is_empty());
+    }
+
+    #[test]
+    fn resume_point_survives_a_reload() {
+        let dir = scratch("resume-reload");
+        let a = dir.join("a.mkv");
+        touch(&a);
+        {
+            let history = History::open(&dir);
+            history.record(a.to_str().unwrap());
+            history.update_position(a.to_str().unwrap(), 95.0, 300.0);
+        }
+        let reopened = History::open(&dir);
+        assert_eq!(reopened.resume_point(a.to_str().unwrap()), (95.0, 300.0));
+    }
+
+    /// Documents written before the resume milestone use the serde defaults.
+    #[test]
+    fn older_documents_get_zero_resume() {
+        let dir = scratch("resume-migrate");
+        fs::write(
+            dir.join("history.json"),
+            r#"[{"path":"C:\\a.mkv","opened_at":1700000000000}]"#,
+        )
+        .unwrap();
+        let history = History::open(&dir);
+        assert_eq!(history.resume_point("C:\\a.mkv"), (0.0, 0.0));
     }
 }

@@ -17,6 +17,8 @@ use libmpv2::{Format, Mpv, MpvInitializer, mpv_end_file_reason};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::settings::AudioState;
+
 /// Maximum rate for `time-pos` updates pushed to the frontend (30 fps).
 const TIME_POS_MIN_INTERVAL: Duration = Duration::from_millis(33);
 
@@ -66,14 +68,30 @@ pub struct Player {
 
 impl Player {
     /// Creates the mpv instance rendering into the native `wid` surface and
-    /// starts the event-loop thread.
-    pub fn new(wid: i64, app: AppHandle) -> Result<Self, PlayerError> {
+    /// starts the event-loop thread. `audio` applies the persisted volume
+    /// and mute before the first event reaches the frontend.
+    pub fn new(wid: i64, app: AppHandle, audio: AudioState) -> Result<Self, PlayerError> {
         let mpv = Mpv::with_initializer(|init: MpvInitializer| {
             configure(init, wid)?;
             Ok(())
         })?;
 
         let mpv = Arc::new(mpv);
+
+        // Only set what differs from mpv's defaults; a no-op set fires a
+        // property event for nothing, which would wake the frontend during
+        // startup for no visible change.
+        let default_audio = AudioState::default();
+        if audio.volume != default_audio.volume
+            && let Err(err) = mpv.set_property("volume", audio.volume)
+        {
+            eprintln!("failed to restore the saved volume: {err}");
+        }
+        if audio.mute
+            && let Err(err) = mpv.set_property("mute", audio.mute)
+        {
+            eprintln!("failed to restore the saved mute state: {err}");
+        }
 
         // Observed properties → frontend. ids are stable per property.
         for (id, (name, format)) in (1u64..).zip([
