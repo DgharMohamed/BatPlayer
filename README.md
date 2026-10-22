@@ -26,6 +26,9 @@ See the [roadmap](#roadmap) for planned work.
 - Play media through the libmpv playback engine.
 - Open, seek, adjust volume and playback speed, and switch audio and subtitle
   tracks.
+- Queue whole folders: Media ▸ Open Folder… or drop a folder onto the window,
+  and every media file inside (recursively) joins the queue in a stable
+  alphabetical order; mixed file + folder drops work too.
 - Use a native video surface with HTML controls layered over it.
 - Run on Windows, Linux, and macOS, with platform-specific support and testing
   noted below.
@@ -95,18 +98,34 @@ macOS) are planned for Milestone 5.
 
 ## Keyboard shortcuts
 
+VLC-parity keys are marked like here (`q`) and behavioral notes live in
+`docs/vlc-behavior-reference.md`.
+
 | Key | Action |
 | --- | --- |
-| `Ctrl+O` | Open a media file |
-| `Space` / `K` | Play or pause |
+| `Ctrl+O` | Open a media file (replaces the playlist) |
+| `Ctrl+L` | Toggle the playlist drawer |
+| `Space` / `K` (q: `Space`) | Play or pause |
 | `F` / double-click video | Toggle fullscreen (`Esc` exits) |
-| `←` / `→` | Seek −5 s / +5 s (`Shift`: ±10 s) |
-| `↑` / `↓` | Increase or decrease volume |
-| `M` | Mute or unmute |
-| `[` / `]` / `Backspace` | Decrease speed / increase speed / normal speed |
+| `←` / `→` | Seek −5 s / +5 s |
+| `Shift+←` / `Shift+→` (q) | Seek ±3 s (extrashort) |
+| `Alt+←` / `Alt+→` (q) | Seek ±10 s (short) |
+| `Ctrl+←` / `Ctrl+→` (q) | Seek ±60 s (medium) |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` (q) | Seek ±300 s (long) |
+| `↑` / `↓` / `Ctrl+↑` / `Ctrl+↓` (q) | Increase or decrease volume (5 %) |
+| `M` (q) | Mute or unmute |
+| `N` / `P` (q) | Next / previous item in the queue |
+| `L` (q) | Cycle loop: off → loop all → repeat current |
+| `R` (q) | Toggle random play order |
+| `E` | Stop (alias; `Esc` while loading cancels the load) |
+| `[` / `]` (q) / `+` / `−` (q) / `Backspace` | Slower / faster / ±1.0 speed jump / normal speed |
 | `,` / `.` | Previous or next frame while paused |
-| `S` | Save a snapshot to Pictures |
-| `A` / `V` | Cycle audio or subtitle track |
+| `S` or `Shift+S` (q: `Shift+s`) | Save a snapshot to Pictures |
+| `A` / `B` (q) / `V` (q) | Cycle audio / audio (VLC) / subtitle track |
+| Mouse wheel over video | Volume steps (BatPlayer addition) |
+
+`q:` = the matching default in VLC Media Player 3.0.x, used as the behavioral
+reference; plain entries are BatPlayer's own.
 
 ## Architecture
 
@@ -163,6 +182,21 @@ The following environment variables can also be used for manual debugging:
 These hooks are inactive unless configured and are compiled out of release
 builds.
 
+## Window probe
+
+`scripts/window-probe.ps1` attaches to a *running* instance and proves the
+window-manager behavior of the frameless window through Win32, without touching
+the UI: the kept resizable/maximizable/minimizable styles, the drag-resize
+ring's edge and corner hit-tests (direct and OS-routed), **real scripted
+edge drags** that must engage the OS modal sizing loop and move the window
+exactly as far as the cursor, minimize/restore round-trips, maximize landing
+on the monitor work area, and the webview plus native surface following an
+external Snap-like resize.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/window-probe.ps1
+```
+
 ## Project structure
 
 ```text
@@ -186,8 +220,10 @@ src/
 ├─ styles/           # CSS variables and global styles
 └─ utils/            # Actions, dialogs, media openers, and formatting
 scripts/
-├─ fetch-mpv.ps1     # Fetches libmpv on Windows
-└─ autotest.ps1      # Windows debug-build visual check
+├─ fetch-mpv.ps1      # Fetches libmpv on Windows
+├─ autotest.ps1       # Windows debug-build visual check
+└─ window-probe.ps1   # Window-manager responsiveness proof (drag-resize ring,
+                      # real edge drags, minimize/maximize/Snap-follow checks)
 ```
 
 ## Roadmap
