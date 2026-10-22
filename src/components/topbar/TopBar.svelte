@@ -277,22 +277,6 @@
     {$displayTitle || t("app.name")}
   </span>
 
-  <button
-    class="control playlist-toggle"
-    class:armed={$playlistOpen}
-    type="button"
-    title={t("controls.playlist")}
-    aria-label={t("controls.playlist")}
-    aria-pressed={$playlistOpen}
-    onclick={() => void togglePlaylist()}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h7v-2H3v2zm14-10v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"
-      />
-    </svg>
-  </button>
-
   <div class="window-controls">
     <button
       class="control"
@@ -461,18 +445,6 @@
     stroke: currentColor;
     stroke-width: 1;
     stroke-linecap: round;
-  }
-
-  /* The playlist toggle is a fill icon like the window buttons are strokes. */
-  .playlist-toggle svg {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
-    stroke: none;
-  }
-
-  .playlist-toggle.armed {
-    color: var(--accent);
   }
 
   .control:hover {

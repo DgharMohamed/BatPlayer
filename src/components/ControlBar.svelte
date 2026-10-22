@@ -10,6 +10,7 @@
     stopPlayback,
     takeSnapshot,
     toggleMute,
+    togglePlaylist,
     togglePlayPause,
   } from "../utils/actions";
   import { setVolume } from "../api/player";
@@ -24,7 +25,7 @@
     paused,
     volume,
   } from "../stores/player";
-  import { loopMode, playlistIndex, playlistItems } from "../stores/playlist";
+  import { loopMode, playlistIndex, playlistItems, playlistOpen } from "../stores/playlist";
   import { fullscreen, toggleFullscreen } from "../stores/window";
   import { formatTime } from "../utils/time";
 
@@ -287,6 +288,22 @@
           {/if}
         </svg>
       </button>
+
+      <button
+        class="icon-btn"
+        class:armed={$playlistOpen}
+        type="button"
+        title={t("controls.playlist")}
+        aria-label={t("controls.playlist")}
+        aria-pressed={$playlistOpen}
+        onclick={() => void togglePlaylist()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h7v-2H3v2zm14-10v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"
+          />
+        </svg>
+      </button>
     </div>
   </div>
 </footer>
@@ -355,6 +372,11 @@
   .icon-btn:hover:enabled {
     background: rgba(255, 255, 255, 0.07);
     color: var(--text);
+  }
+
+  /* Toggle state: the queue drawer is open. */
+  .icon-btn.armed {
+    color: var(--accent);
   }
 
   .icon-btn:focus-visible {
