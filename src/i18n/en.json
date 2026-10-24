@@ -3,6 +3,28 @@
     "name": "BatPlayer",
     "about": "BatPlayer — a modern media player built with Tauri v2 and libmpv."
   },
+  "about": {
+    "eyebrow": "A focused media experience",
+    "description": "A modern desktop media player built for smooth, flexible playback.",
+    "version": "Version",
+    "featuresTitle": "Made for your media",
+    "features": {
+      "formats": "Play a wide range of video and audio formats",
+      "controls": "Fine playback speed and keyboard controls",
+      "playlists": "Queue, shuffle, and repeat your media",
+      "tracks": "Switch audio tracks and subtitles",
+      "display": "Fullscreen and compact mini player",
+      "snapshots": "Capture snapshots from your video"
+    },
+    "builtWith": "Powered by",
+    "links": {
+      "app": "Visit batsoft.vercel.app",
+      "terms": "Terms of Service",
+      "privacy": "Privacy Policy"
+    },
+    "footer": "Made for the moments worth watching.",
+    "close": "Close About"
+  },
   "video": {
     "areaLabel": "Video area"
   },
@@ -78,6 +100,11 @@
     "unmute": "Unmute",
     "volume": "Volume",
     "playlist": "Playlist",
+    "slower": "Slow down (−0.25×)",
+    "faster": "Speed up (+0.25×)",
+    "normalSpeed": "Reset speed to 1×",
+    "miniPlayer": "Mini player",
+    "exitMiniPlayer": "Exit mini player",
     "fullscreen": "Fullscreen",
     "leaveFullscreen": "Leave fullscreen (Esc)",
     "snapshot": "Save snapshot",
@@ -103,6 +130,7 @@
   },
   "playlist": {
     "title": "Playlist",
+    "resize": "Resize playlist panel",
     "empty": "Nothing queued yet — drop media here",
     "clear": "Clear playlist",
     "remove": "Remove from playlist",
@@ -117,6 +145,8 @@
     "queueTruncated": "Queue scan stopped at its limit — some files were skipped",
     "resolverFailed": "Folder scan failed",
     "resumedAt": "Resuming playback from",
-    "skipped": "skipped — could not play"
+    "skipped": "skipped — could not play",
+    "noAudioTrack": "This video has no audio track",
+    "audioOutputUnavailable": "No audio output device found"
   }
 }

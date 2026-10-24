@@ -129,7 +129,7 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.stop"),
-          hint: "E",
+          hint: "S",
           disabled: !hasMedia,
           action: a.stop,
         },
@@ -146,6 +146,7 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
           hint: "N",
           action: a.next,
         },
+        { kind: "separator" },
         {
           kind: "item",
           label: t("menu.loopPlaylist"),
@@ -185,14 +186,13 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.frameBack"),
-          hint: ",",
           disabled: !hasMedia,
           action: () => a.frameStep(-1),
         },
         {
           kind: "item",
           label: t("menu.frameStep"),
-          hint: ".",
+          hint: "E",
           disabled: !hasMedia,
           action: () => a.frameStep(1),
         },
@@ -214,7 +214,7 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.resetSpeed"),
-          hint: "Backspace",
+          hint: "=",
           disabled: !hasMedia,
           action: a.resetSpeed,
         },
@@ -227,14 +227,14 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.volumeUp"),
-          hint: "Up",
+          hint: "Ctrl+Up",
           disabled: !hasMedia,
           action: () => a.changeVolume(5),
         },
         {
           kind: "item",
           label: t("menu.volumeDown"),
-          hint: "Down",
+          hint: "Ctrl+Down",
           disabled: !hasMedia,
           action: () => a.changeVolume(-5),
         },
@@ -249,7 +249,7 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.audioTrack"),
-          hint: "A",
+          hint: "B",
           disabled: !hasMedia,
           action: a.cycleAudio,
         },
@@ -269,7 +269,7 @@ export function buildMenus(state: MenuState, a: MenuCallbacks): MenuDefinition[]
         {
           kind: "item",
           label: t("menu.snapshot"),
-          hint: "S",
+          hint: "Shift+S",
           disabled: !hasMedia,
           action: a.snapshot,
         },

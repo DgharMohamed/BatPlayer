@@ -1,5 +1,6 @@
 <script lang="ts">
   import BatLogo from "../BatLogo.svelte";
+  import AboutDialog from "../AboutDialog.svelte";
   import { t } from "../../i18n";
   import MenuFlyout from "./MenuFlyout.svelte";
   import {
@@ -24,7 +25,7 @@
   import { chromeHidden, menuOpen, pinChrome } from "../../stores/chrome";
   import { recent } from "../../stores/history";
   import { loopMode, playPaths, playlistOpen, shuffleEnabled } from "../../stores/playlist";
-  import { displayTitle, mediaLoaded, muted, showNotice } from "../../stores/player";
+  import { displayTitle, mediaLoaded, muted } from "../../stores/player";
   import { closeWindow, fullscreen, maximized, minimizeWindow, toggleFullscreen, toggleMaximize } from "../../stores/window";
   import {
     isMediaPath,
@@ -41,6 +42,7 @@
   let slotFlipped = $state(false);
   let barEl = $state<HTMLElement | null>(null);
   let paneEl = $state<HTMLDivElement | null>(null);
+  let aboutOpen = $state(false);
 
   const menus: MenuDefinition[] = $derived.by(() =>
     buildMenus(
@@ -85,7 +87,7 @@
       snapshot: () => void takeSnapshot(),
       cycleSubtitle: () => void cycleSubtitleTrack(),
       attachSubtitle: () => void pickAndAttachSubtitle(),
-      about: () => showNotice(t("app.about"), "info"),
+      about: () => (aboutOpen = true),
     };
   }
 
@@ -234,6 +236,7 @@
   bind:this={barEl}
   class="top-bar"
   class:hidden={$chromeHidden}
+  class:fullscreen={$fullscreen}
   data-tauri-drag-region
   ondblclick={onBarDblclick}
 >
@@ -248,6 +251,7 @@
           class="menu-btn"
           class:armed={openMenu === menu.id}
           type="button"
+          title={menu.label}
           data-menu-id={menu.id}
           aria-haspopup="menu"
           aria-expanded={openMenu === menu.id}
@@ -306,7 +310,7 @@
     <button
       class="control close"
       type="button"
-      title={t("topBar.close")}
+      title={`${t("topBar.close")} (Alt+F4)`}
       aria-label={t("topBar.close")}
       onclick={closeWindow}
     >
@@ -314,6 +318,10 @@
     </button>
   </div>
 </header>
+
+{#if aboutOpen}
+  <AboutDialog onclose={() => (aboutOpen = false)} />
+{/if}
 
 <style>
   .top-bar {
@@ -342,6 +350,12 @@
     transform: translateY(-100%);
     opacity: 0;
     pointer-events: none;
+  }
+
+  /* Same as the control bar: over live video in fullscreen, stay glassy. */
+  .top-bar.fullscreen {
+    background: linear-gradient(to bottom, rgba(6, 6, 8, 0.72), rgba(10, 10, 13, 0.4));
+    backdrop-filter: blur(8px);
   }
 
   .logo {
