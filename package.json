@@ -1,7 +1,7 @@
 {
   "name": "batplayer",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A modern cross-platform media player",
   "type": "module",
   "license": "MIT",

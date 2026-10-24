@@ -77,7 +77,7 @@ Real `BS_AUTOCHECKBOX` controls paint an **opaque white face** that cannot be th
 ```powershell
 cd C:\Users\Moha\Desktop\Projects\BatPlayer
 npm run tauri build
-# -> src-tauri\target\release\bundle\nsis\BatPlayer_0.1.0_x64-setup.exe
+# -> src-tauri\target\release\bundle\nsis\BatPlayer_<version>_x64-setup.exe
 ```
 Tauri stages the template at `src-tauri\target\release\nsis\x64\installer.nsi` (adds BOM) and compiles from there.
 
@@ -142,3 +142,39 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
 ```
 Do NOT use editors/tools that inject a UTF-8 BOM - and remember direct makensis runs against a *BOM-less* file will mojibake the glyph characters.
+
+---
+
+## 7. File associations ("Open with" visibility, added v0.1.1)
+
+Install and uninstall manage BatPlayer's shell visibility additively — the
+extension's own **default value is never written**, so double-click stays with
+the user's existing player and "Open with" can still list BatPlayer:
+
+- `HKCU\Software\Classes\BatPlayer.Media` — ProgID (`DefaultIcon`,
+  `shell\open\command` = `"…\batplayer.exe" "%1"`).
+- `HKCU\Software\Classes\.<ext>\OpenWithProgids` — one value per extension,
+  the list source of Explorer's "Open with" submenu.
+- `HKCU\Software\BatSoft\BatPlayer\Capabilities` (+ per-ext `FileAssociations`)
+  and the `HKCU\Software\RegisteredApplications` "BatPlayer" value — the pair
+  Windows Settings ▸ "Default apps" and "Choose another app" enumerate.
+- Uninstall removes: every `OpenWithProgids` value (and the ext key
+  `/ifempty`), the ProgID, the `Capabilities` subtree and the
+  `RegisteredApplications` value. **`Software\Classes\.ext` keys of other
+  apps are never touched.** `!insertmacro UPDATEFILEASSOC` (SHChangeNotify)
+  fires on both paths so Explorer refreshes without a logoff.
+- The 23 registered extensions mirror `src/utils/media.ts` `MEDIA_EXTENSIONS`
+  (what the player accepts) and `tauri.conf.json` `bundle.fileAssociations`
+  (`ext` array — the MSI target's own registration). **Keep all three in
+  sync** when a new format is added; the exact same list appears in
+  `installer.nsi` as `AssocRegisterExt`/`AssocUnregisterExt` calls after the
+  defines at the top of the template.
+
+Post-install verification (read-only):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\installer\probe_assoc.ps1
+# 0 failure(s) expected; also confirms no default was taken over.
+```
+Verified 2026-10-24 on a fresh v0.1.1 install (all checks OK, `.mp4` default
+still `PotPlayerMini64.MP4`) and after a silent uninstall (every association
+surface deleted; foreign extension keys intact).

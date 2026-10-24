@@ -8,6 +8,7 @@
 mod commands;
 pub mod history;
 pub(crate) mod media_scan;
+pub mod open_with;
 pub mod platform;
 mod player;
 pub(crate) mod settings;
@@ -26,12 +27,29 @@ mod autotest;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // File arguments this process was launched with (Explorer ▸ "Open with",
+    // file-association double-clicks). The single-instance plugin below only
+    // reports SECOND launches, so this process's own argv is captured here;
+    // consumed by the webview's boot pull in setup.
+    let cwd = std::env::current_dir();
+    let boot_files = open_with::open_file_candidates(
+        &std::env::args().collect::<Vec<_>>(),
+        cwd.as_deref().ok(),
+    );
+
     tauri::Builder::default()
+        // Registered first by plugin convention: a second launch (chosen
+        // while BatPlayer already runs) forwards its "Open with" arguments
+        // to this instance instead of opening a bare second player.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            open_with::forward_launch(app, argv, std::path::Path::new(&cwd));
+        }))
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::load_file,
             commands::save_position,
             commands::resolve_media_paths,
+            open_with::take_pending_open_files,
             commands::autotest_scene_names,
             commands::autotest_log,
             commands::play_pause,
@@ -127,6 +145,13 @@ pub fn run() {
             // plus the resume points and audio settings read above.
             app.manage(history::History::open(&data_dir));
             app.manage(settings);
+
+            // Hand this launch's own command-line media paths to the open-with
+            // queue (delivered on the webview's boot pull), then publish the
+            // state so second-instance callbacks can push to it.
+            let pending = open_with::PendingOpenFiles::default();
+            pending.enqueue(app.handle(), boot_files);
+            app.manage(pending);
 
             // Optional env-var driven self-test (scripts/autotest.ps1).
             #[cfg(debug_assertions)]

@@ -1,11 +1,11 @@
-# Drives the installer with REAL mouse input only (SetCursorPos + mouse_event),
+﻿# Drives the installer with REAL mouse input only (SetCursorPos + mouse_event),
 # verifying each step by observing process/window state. No PostMessage anywhere.
 # Phase "install": welcome -> click Install Now -> expect progress page -> wait finish -> click Finish -> expect exit.
 # Phase "reinstallX": (2nd run, registry present) -> wait reinstall page -> click X -> expect exit.
 param(
     [ValidateSet('install','reinstallX','reinstallFull','welcomeX','finishX','probes')]
     [string]$Phase = 'install',
-    [string]$ProcName = "BatPlayer_Setup",
+    [string]$ProcName = "BatPlayer*setup",  # wildcard: bundler out is BatPlayer_<ver>-setup.exe
     [string]$ExePath = "",
     [string]$ShotDir = ""
 )

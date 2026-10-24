@@ -1,6 +1,6 @@
 [package]
 name = "batplayer"
-version = "0.1.0"
+version = "0.1.1"
 description = "A modern cross-platform media player"
 authors = ["BatSoft"]
 edition = "2024"
@@ -24,6 +24,10 @@ serde_json = "1"
 thiserror = "2"
 libmpv2 = "6.0.0"
 tauri-plugin-dialog = "2.8.3"
+# Single process: a second launch (e.g. "Open with" on another video while
+# BatPlayer runs) forwards its command line to the running instance instead
+# of opening a bare second player window.
+tauri-plugin-single-instance = "2"
 
 # Read more about Tauri's optimization guidelines:
 # https://tauri.app/concept/size/#cargo-configuration

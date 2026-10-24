@@ -70,6 +70,32 @@ ${StrLoc}
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"
 
+; ---------------------------------------------------------------------------
+; File associations: visibility in Explorer's "Open with" list and in
+; Windows Settings > Default apps ("Default apps" enumerates the app's
+; `Capabilities` via `RegisteredApplications`). Registration is additive on
+; purpose: each extension only gets an `OpenWithProgids` entry and the
+; extension's default is never written, so the user's existing player keeps
+; double-click; switching to BatPlayer stays a user action ("Open with >
+; Always" or Settings). The extension list mirrors `src/utils/media.ts`
+; MEDIA_EXTENSIONS — exactly what the player accepts; keep them in sync.
+!define ASSOC_PROGID "BatPlayer.Media"
+!define ASSOC_DESCR "BatPlayer Media File"
+
+!macro AssocRegisterExt EXT
+  WriteRegStr SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${ASSOC_PROGID}" ""
+  WriteRegStr SHCTX "${MANUPRODUCTKEY}\Capabilities\FileAssociations" ".${EXT}" "${ASSOC_PROGID}"
+!macroend
+
+!macro AssocUnregisterExt EXT
+  DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${ASSOC_PROGID}"
+  DeleteRegKey /ifempty SHCTX "Software\Classes\.${EXT}\OpenWithProgids"
+  ; Drop the extension key only when nothing else (value or subkey) lives in
+  ; it — existing associations of other apps are never touched.
+  DeleteRegKey /ifempty SHCTX "Software\Classes\.${EXT}"
+!macroend
+
+
 Var PassiveMode
 Var UpdateMode
 Var NoShortcutMode
@@ -1264,7 +1290,43 @@ Section Install
 
   ; Copy external binaries
 
-  ; Create file associations
+  ; Create file associations — put BatPlayer on the shell's Open-with list
+  ; for every media type the player accepts. Additive: `OpenWithProgids`
+  ; listings plus the Capabilities/RegisteredApplications pair "Default
+  ; apps" enumerates; an extension's default value is never touched, so
+  ; existing double-click associations are preserved.
+  WriteRegStr SHCTX "Software\Classes\${ASSOC_PROGID}" "" "${ASSOC_DESCR}"
+  WriteRegStr SHCTX "Software\Classes\${ASSOC_PROGID}\DefaultIcon" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0"
+  WriteRegStr SHCTX "Software\Classes\${ASSOC_PROGID}\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+  WriteRegStr SHCTX "${MANUPRODUCTKEY}\Capabilities" "ApplicationName" "${PRODUCTNAME}"
+  WriteRegStr SHCTX "${MANUPRODUCTKEY}\Capabilities" "ApplicationDescription" "A modern desktop media player for video and audio."
+  !insertmacro AssocRegisterExt "mkv"
+  !insertmacro AssocRegisterExt "mp4"
+  !insertmacro AssocRegisterExt "m4v"
+  !insertmacro AssocRegisterExt "avi"
+  !insertmacro AssocRegisterExt "mov"
+  !insertmacro AssocRegisterExt "webm"
+  !insertmacro AssocRegisterExt "wmv"
+  !insertmacro AssocRegisterExt "flv"
+  !insertmacro AssocRegisterExt "ts"
+  !insertmacro AssocRegisterExt "m2ts"
+  !insertmacro AssocRegisterExt "mts"
+  !insertmacro AssocRegisterExt "mpg"
+  !insertmacro AssocRegisterExt "mpeg"
+  !insertmacro AssocRegisterExt "vob"
+  !insertmacro AssocRegisterExt "ogv"
+  !insertmacro AssocRegisterExt "mp3"
+  !insertmacro AssocRegisterExt "m4a"
+  !insertmacro AssocRegisterExt "aac"
+  !insertmacro AssocRegisterExt "flac"
+  !insertmacro AssocRegisterExt "wav"
+  !insertmacro AssocRegisterExt "ogg"
+  !insertmacro AssocRegisterExt "opus"
+  !insertmacro AssocRegisterExt "wma"
+  WriteRegStr SHCTX "Software\RegisteredApplications" "${PRODUCTNAME}" "${MANUPRODUCTKEY}\Capabilities"
+  ; Tell the shell its icon/open-with data changed, so Explorer refreshes
+  ; without a logoff.
+  !insertmacro UPDATEFILEASSOC
 
   ; Register deep links
 
@@ -1386,7 +1448,37 @@ Section Uninstall
 
   ; Delete external binaries
 
-  ; Delete app associations
+  ; Delete app associations. Runs in every uninstall mode: an update
+  ; reinstalls re-registers them right after, and a real uninstall must not
+  ; leave "Open with" entries that point at a deleted binary.
+  !insertmacro AssocUnregisterExt "mkv"
+  !insertmacro AssocUnregisterExt "mp4"
+  !insertmacro AssocUnregisterExt "m4v"
+  !insertmacro AssocUnregisterExt "avi"
+  !insertmacro AssocUnregisterExt "mov"
+  !insertmacro AssocUnregisterExt "webm"
+  !insertmacro AssocUnregisterExt "wmv"
+  !insertmacro AssocUnregisterExt "flv"
+  !insertmacro AssocUnregisterExt "ts"
+  !insertmacro AssocUnregisterExt "m2ts"
+  !insertmacro AssocUnregisterExt "mts"
+  !insertmacro AssocUnregisterExt "mpg"
+  !insertmacro AssocUnregisterExt "mpeg"
+  !insertmacro AssocUnregisterExt "vob"
+  !insertmacro AssocUnregisterExt "ogv"
+  !insertmacro AssocUnregisterExt "mp3"
+  !insertmacro AssocUnregisterExt "m4a"
+  !insertmacro AssocUnregisterExt "aac"
+  !insertmacro AssocUnregisterExt "flac"
+  !insertmacro AssocUnregisterExt "wav"
+  !insertmacro AssocUnregisterExt "ogg"
+  !insertmacro AssocUnregisterExt "opus"
+  !insertmacro AssocUnregisterExt "wma"
+  DeleteRegKey SHCTX "Software\Classes\${ASSOC_PROGID}"
+  DeleteRegKey SHCTX "${MANUPRODUCTKEY}\Capabilities"
+  DeleteRegValue SHCTX "Software\RegisteredApplications" "${PRODUCTNAME}"
+  DeleteRegKey /ifempty SHCTX "Software\RegisteredApplications"
+  !insertmacro UPDATEFILEASSOC
 
   ; Delete deep links
 

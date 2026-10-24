@@ -3,6 +3,7 @@
   import { get } from "svelte/store";
 
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { onOpenFiles, takePendingOpenFiles } from "./api/open-with";
   import { setPlaylistDock } from "./api/player";
   import ControlBar from "./components/ControlBar.svelte";
   import BatLogo from "./components/BatLogo.svelte";
@@ -14,6 +15,7 @@
   import { t } from "./i18n";
   import {
     bindWindowState,
+    enterMiniPlayer,
     exitFullscreen,
     exitMiniPlayer,
     fullscreen,
@@ -74,6 +76,24 @@
     });
   }
 
+  /**
+   * One pipeline for every external path arrival — drag-and-drop, the OS
+   * "Open with" boot pull and second-launch forwards alike: files and
+   * folders expand Rust-side into a sorted media queue and play; subtitle
+   * (or unknown) paths keep the attach/fail notices.
+   */
+  function playDroppedOrAttach(paths: string[]): void {
+    void (async () => {
+      if (await playDroppedSources(paths)) {
+        return;
+      }
+      const [first] = paths;
+      if (first !== undefined) {
+        await openMediaPath(first);
+      }
+    })();
+  }
+
   onMount(() => {
     const cleanups: Array<() => void> = [];
 
@@ -81,6 +101,13 @@
       cleanups.push(await bindPlayerEvents());
       cleanups.push(await bindWindowState());
       cleanups.push(await bindHistory());
+      // OS "Open with". Subscribe BEFORE the boot pull: the pull flips later
+      // arrivals from queued to pushed, so the listener must exist first.
+      cleanups.push(await onOpenFiles((paths) => playDroppedOrAttach(paths)));
+      const pendingFiles = await takePendingOpenFiles();
+      if (pendingFiles.length > 0) {
+        playDroppedOrAttach(pendingFiles);
+      }
       cleanups.push(
         playlistOpen.subscribe((open) => {
           syncPlaylistDock(open ? get(playlistDockWidth) : 0);
@@ -112,19 +139,7 @@
               break;
             case "drop": {
               draggingFiles = false;
-              const paths = event.payload.paths;
-              void (async () => {
-                // Files and folders alike expand Rust-side into a sorted
-                // media queue; a plain file-only drop keeps this behavior.
-                if (await playDroppedSources(paths)) {
-                  return;
-                }
-                // Subtitle (or unknown) drops keep the attach/fail notices.
-                const [first] = paths;
-                if (first !== undefined) {
-                  await openMediaPath(first);
-                }
-              })();
+              playDroppedOrAttach(event.payload.paths);
               break;
             }
             case "leave":
