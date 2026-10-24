@@ -2,7 +2,7 @@
 name = "batplayer"
 version = "0.1.0"
 description = "A modern cross-platform media player"
-authors = ["BatPlayer contributors"]
+authors = ["BatSoft"]
 edition = "2024"
 
 [lib]

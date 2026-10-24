@@ -95,8 +95,17 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt
 ```
 
-Packaging targets (MSI/NSIS on Windows, deb/AppImage on Linux, and dmg on
-macOS) are planned for Milestone 5.
+Windows NSIS setup builds use BatPlayer-branded installer artwork and the
+provided logo for the setup executable and installed app icon. The installer
+includes English and Arabic UI languages and the MIT license page. To rebuild
+the Windows icon and installer artwork after replacing the source logo, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/generate-windows-branding.ps1
+```
+
+The source logo is `src-tauri/icons/batplayer-logo-source.png`; generated
+icons and NSIS artwork live in `src-tauri/icons/`.
 
 ## Keyboard shortcuts
 

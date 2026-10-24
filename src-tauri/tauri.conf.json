@@ -17,6 +17,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Video",
+    "publisher": "BatSoft",
+    "shortDescription": "A modern media player",
+    "longDescription": "BatPlayer is a modern desktop media player for video and audio, with playlists, playback speed controls, subtitles, and a compact mini player.",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
     "resources": {
       "mpv/libmpv-2.dll": "libmpv-2.dll"
     },
@@ -26,6 +32,19 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "icons/installer-header.bmp",
+        "uninstallerHeaderImage": "icons/installer-header.bmp",
+        "sidebarImage": "icons/installer-sidebar.bmp",
+        "installMode": "currentUser",
+        "languages": ["English", "Arabic"],
+        "displayLanguageSelector": true,
+        "template": "nsis/installer.nsi"
+      }
+    }
   }
 }
