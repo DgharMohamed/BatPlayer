@@ -46,6 +46,7 @@
       <button
         class="cancel"
         type="button"
+        title={t(cancelling ? "loading.cancelling" : "loading.cancel")}
         disabled={cancelling}
         onclick={cancelLoad}
       >

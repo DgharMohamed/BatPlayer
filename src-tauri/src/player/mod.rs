@@ -45,8 +45,15 @@ pub enum PlayerEvent {
     },
     /// A new file started loading.
     StartFile,
-    /// The file finished loading and playback is starting.
-    FileLoaded,
+    /// The file finished loading, including audio-track information.
+    FileLoaded {
+        #[serde(rename = "audioTracks")]
+        audio_tracks: TrackInfo,
+        #[serde(rename = "audioVolume")]
+        audio_volume: f64,
+        #[serde(rename = "audioMuted")]
+        audio_muted: bool,
+    },
     /// Playback of the current file ended; `error` is set when it failed.
     EndFile { error: Option<String> },
 }
@@ -320,7 +327,11 @@ fn event_loop(mpv: Arc<Mpv>, shutdown: Arc<AtomicBool>, app: AppHandle) {
                 }
             }
             Ok(Event::StartFile) => PlayerEvent::StartFile,
-            Ok(Event::FileLoaded) => PlayerEvent::FileLoaded,
+            Ok(Event::FileLoaded) => PlayerEvent::FileLoaded {
+                audio_tracks: track_info(&mpv, "aid", "audio"),
+                audio_volume: mpv.get_property("volume").unwrap_or(100.0),
+                audio_muted: mpv.get_property("mute").unwrap_or(false),
+            },
             Ok(Event::EndFile(reason)) => {
                 let error = if reason == mpv_end_file_reason::Error {
                     Some("the file could not be played".to_string())

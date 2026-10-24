@@ -30,6 +30,22 @@ const SHOT_DELAY: Duration = Duration::from_secs(3);
 const START_DELAY: Duration = Duration::from_millis(800);
 
 pub fn kick(app: AppHandle) {
+    // TODO(diag): temporary deterministic fullscreen hook for verification.
+    if let Ok(delay) = std::env::var("BATPLAYER_AUTOTEST_FULLSCREEN") {
+        let app = app.clone();
+        std::thread::Builder::new()
+            .name("diag-fs".into())
+            .spawn(move || {
+                let secs: u64 = delay.parse().unwrap_or(3);
+                std::thread::sleep(std::time::Duration::from_secs(secs));
+                if let Some(window) = app.get_webview_window("main") {
+                    eprintln!("diag: requesting fullscreen");
+                    let _ = window.set_fullscreen(true);
+                }
+            })
+            .expect("diag-fs thread spawns");
+    }
+
     let media = std::env::var(FILE_VAR)
         .ok()
         .filter(|value| !value.is_empty());

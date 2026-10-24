@@ -8,6 +8,8 @@
     report,
     seekAbsolute,
     stopPlayback,
+    resetSpeed,
+    stepSpeed,
     takeSnapshot,
     toggleMute,
     togglePlaylist,
@@ -23,10 +25,11 @@
     mediaLoaded,
     muted,
     paused,
+    speed,
     volume,
   } from "../stores/player";
   import { loopMode, playlistIndex, playlistItems, playlistOpen } from "../stores/playlist";
-  import { fullscreen, toggleFullscreen } from "../stores/window";
+  import { enterMiniPlayer, fullscreen, miniPlayer, toggleFullscreen } from "../stores/window";
   import { formatTime } from "../utils/time";
 
   /** Live (uncommitted) seek position while the range element is dragged. */
@@ -96,6 +99,8 @@
 <footer
   class="control-bar"
   class:hidden={$chromeHidden}
+  class:fullscreen={$fullscreen}
+  class:mini={$miniPlayer}
   onpointerenter={() => pinChrome(true)}
   onpointerleave={() => pinChrome(false)}
 >
@@ -126,10 +131,34 @@
   <div class="button-row">
     <div class="group">
       <button
+        class="speed-control"
+        type="button"
+        disabled={!workable || $speed <= 0.25}
+        title={`${t("controls.slower")} ([ / -)`}
+        aria-label={t("controls.slower")}
+        onclick={() => void stepSpeed(-0.25)}
+      >−</button>
+      <button
+        class="speed-value"
+        type="button"
+        disabled={!workable}
+        title={`${t("controls.normalSpeed")} (=)`}
+        aria-label={t("controls.normalSpeed")}
+        onclick={() => void resetSpeed()}
+      >{$speed.toFixed(2)}×</button>
+      <button
+        class="speed-control"
+        type="button"
+        disabled={!workable || $speed >= 4}
+        title={`${t("controls.faster")} (] / +)`}
+        aria-label={t("controls.faster")}
+        onclick={() => void stepSpeed(0.25)}
+      >+</button>
+      <button
         class="icon-btn"
         type="button"
         disabled={$playlistItems.length === 0}
-        title={t("controls.previous")}
+        title={`${t("controls.previous")} (P)`}
         aria-label={t("controls.previous")}
         onclick={() => void prevTrack()}
       >
@@ -146,9 +175,9 @@
         class="icon-btn play-btn"
         type="button"
         disabled={!workable}
-        title={t(
+        title={`${t(
           $eofReached ? "controls.replay" : $paused ? "controls.play" : "controls.pause",
-        )}
+        )} (Space)`}
         aria-label={t(
           $eofReached ? "controls.replay" : $paused ? "controls.play" : "controls.pause",
         )}
@@ -171,7 +200,7 @@
         class="icon-btn"
         type="button"
         disabled={!canNext}
-        title={t("controls.next")}
+        title={`${t("controls.next")} (N)`}
         aria-label={t("controls.next")}
         onclick={() => void nextTrack()}
       >
@@ -188,7 +217,7 @@
         class="icon-btn"
         type="button"
         disabled={!workable}
-        title={t("controls.stop")}
+        title={`${t("controls.stop")} (S)`}
         aria-label={t("controls.stop")}
         onclick={() => void stopPlayback()}
       >
@@ -203,7 +232,7 @@
         class="icon-btn"
         type="button"
         disabled={!workable}
-        title={t($muted ? "controls.unmute" : "controls.mute")}
+        title={`${t($muted ? "controls.unmute" : "controls.mute")} (M)`}
         aria-label={t($muted ? "controls.unmute" : "controls.mute")}
         onclick={() => void toggleMute()}
       >
@@ -226,6 +255,7 @@
         step="1"
         value={$volume}
         style="--progress: {volumePercent}%"
+        title={`${t("controls.volume")} (Ctrl+Up / Ctrl+Down)`}
         aria-label={t("controls.volume")}
         aria-valuetext={`${$volume}%`}
         disabled={!workable}
@@ -236,7 +266,7 @@
         class="icon-btn"
         type="button"
         disabled={!workable}
-        title={t("controls.audioTrack")}
+        title={`${t("controls.audioTrack")} (B)`}
         aria-label={t("controls.audioTrack")}
         onclick={() => void cycleAudioTrack()}
       >
@@ -247,7 +277,7 @@
         class="icon-btn"
         type="button"
         disabled={!workable}
-        title={t("controls.subtitleTrack")}
+        title={`${t("controls.subtitleTrack")} (V)`}
         aria-label={t("controls.subtitleTrack")}
         onclick={() => void cycleSubtitleTrack()}
       >
@@ -258,11 +288,25 @@
         </svg>
       </button>
 
+      <span class="toolbar-divider" aria-hidden="true"></span>
+
+      <button
+        class="icon-btn mini-player-button"
+        type="button"
+        disabled={!workable}
+        title={t("controls.miniPlayer")}
+        aria-label={t("controls.miniPlayer")}
+        aria-pressed={$miniPlayer}
+        onclick={() => void enterMiniPlayer()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3V5zm2 2v10h14V7H5zm7 5h5v3h-5v-3z" /></svg>
+      </button>
+
       <button
         class="icon-btn"
         type="button"
         disabled={!workable}
-        title={t("controls.snapshot")}
+        title={`${t("controls.snapshot")} (Shift+S)`}
         aria-label={t("controls.snapshot")}
         onclick={() => void takeSnapshot()}
       >
@@ -276,13 +320,14 @@
       <button
         class="icon-btn"
         type="button"
-        title={t($fullscreen ? "controls.leaveFullscreen" : "controls.fullscreen")}
+        title={`${t($fullscreen ? "controls.leaveFullscreen" : "controls.fullscreen")} (F)`}
         aria-label={t($fullscreen ? "controls.leaveFullscreen" : "controls.fullscreen")}
         onclick={() => void toggleFullscreen()}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           {#if $fullscreen}
-            <path d="M9 9h6v6H9z" />
+            <!-- leave fullscreen: standard compress glyph, corners folding in -->
+            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
           {:else}
             <path d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z" />
           {/if}
@@ -293,7 +338,7 @@
         class="icon-btn"
         class:armed={$playlistOpen}
         type="button"
-        title={t("controls.playlist")}
+        title={`${t("controls.playlist")} (Ctrl+L)`}
         aria-label={t("controls.playlist")}
         aria-pressed={$playlistOpen}
         onclick={() => void togglePlaylist()}
@@ -333,6 +378,31 @@
     pointer-events: none;
   }
 
+  /*
+   * In fullscreen the bar floats over live video: a near-opaque slab here
+   * reads as a dead black band across the bottom of the picture, so let
+   * the frame show through and lean on the blur for legibility.
+   */
+  .control-bar.fullscreen {
+    background: linear-gradient(to top, rgba(5, 5, 7, 0.78), rgba(10, 10, 13, 0.42));
+    backdrop-filter: blur(8px);
+  }
+
+  .control-bar.mini { gap: 0; padding: 1px 6px 3px; }
+  .control-bar.mini .button-row { gap: 2px; }
+  .control-bar.mini .group:first-child > :not(.play-btn, .time-label) { display: none; }
+  .control-bar.mini .group:last-child > .icon-btn:not(:first-child) { display: none; }
+  .control-bar.mini .seek-bar { height: 12px; }
+  .control-bar.mini .button-row,
+  .control-bar.mini .group { gap: 1px; }
+  .control-bar.mini .icon-btn { width: 23px; height: 23px; }
+  .control-bar.mini .icon-btn svg { width: 15px; height: 15px; }
+  .control-bar.mini .play-btn { width: 25px; height: 25px; }
+  .control-bar.mini .play-btn svg { width: 16px; height: 16px; }
+  .control-bar.mini .volume-bar { width: 48px; height: 12px; margin: 0 2px; }
+  .control-bar.mini .time-label { margin-left: 3px; font-size: 9px; }
+  .control-bar.mini input[type="range"]::-webkit-slider-thumb { width: 10px; height: 10px; }
+
   .button-row {
     display: flex;
     align-items: center;
@@ -345,6 +415,15 @@
     align-items: center;
     gap: 2px;
   }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 14px;
+    margin: 0 5px;
+    background: var(--border);
+  }
+
+  .control-bar.mini .toolbar-divider { display: none; }
 
   .icon-btn {
     display: inline-flex;
@@ -407,6 +486,26 @@
     color: var(--text-dim);
     white-space: nowrap;
   }
+
+  .speed-control,
+  .speed-value {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+
+  .speed-value { min-width: 48px; color: var(--accent); }
+  .speed-control:hover:enabled,
+  .speed-value:hover:enabled { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+  .speed-control:disabled,
+  .speed-value:disabled { opacity: 0.35; cursor: default; }
 
   /*
    * Sliders keep a thin 4px ink but a 24px hit area, paint the played share

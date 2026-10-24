@@ -37,6 +37,13 @@ function hasHold(): boolean {
 
 /** Cancels the countdown and keeps the bars visible. */
 export function pinChrome(value: boolean): void {
+  // In fullscreen, a stationary pointer over a control must not keep both
+  // bars on screen indefinitely. Let the normal inactivity timer hide them.
+  if (get(fullscreen)) {
+    pinned = false;
+    keepChromeVisible();
+    return;
+  }
   pinned = value;
   if (pinned) {
     chromeHidden.set(false);
@@ -51,6 +58,11 @@ export function pinChrome(value: boolean): void {
  * control that the inactivity timer slid out of view.
  */
 export function pinChromeFocus(value: boolean): void {
+  if (get(fullscreen)) {
+    focusPinned = false;
+    keepChromeVisible();
+    return;
+  }
   if (focusPinned === value) {
     return;
   }
@@ -100,6 +112,14 @@ function disarmHide(): void {
 // fullscreen shows the bars again), a fullscreen pause — which releases
 // its hold in `hasHold` and now auto-hides like playing does — and the
 // playlist drawer, which holds the bars up for its duration.
-for (const store of [paused, idle, eofReached, fullscreen, playlistOpen]) {
+fullscreen.subscribe(() => {
+  // A pointer may already be resting on a bar when fullscreen is entered.
+  // Clear the windowed pin so the fullscreen timer can run from that point.
+  pinned = false;
+  focusPinned = false;
+  keepChromeVisible();
+});
+
+for (const store of [paused, idle, eofReached, playlistOpen]) {
   store.subscribe(() => keepChromeVisible());
 }

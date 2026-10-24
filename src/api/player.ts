@@ -42,7 +42,12 @@ export const SUBTITLE_EXTENSIONS = ["srt", "ass", "ssa", "sub", "vtt", "sup", "s
 export type PlayerEvent =
   | { type: "property"; name: string; value: number | boolean | string }
   | { type: "startFile" }
-  | { type: "fileLoaded" }
+  | {
+      type: "fileLoaded";
+      audioTracks: TrackInfo;
+      audioVolume: number;
+      audioMuted: boolean;
+    }
   | { type: "endFile"; error: string | null };
 
 /** The stored resume point of a file about to play, sent back by `load_file`. */
@@ -65,6 +70,10 @@ export type MediaResolve = {
 /** Expands dropped/picked files and folders into a flat media-file queue. */
 export const resolveMediaPaths = (paths: string[]): Promise<MediaResolve> =>
   invoke("resolve_media_paths", { paths });
+
+/** Reserves or restores the native video width for the docked playlist. */
+export const setPlaylistDock = (width: number): Promise<void> =>
+  invoke("set_playlist_dock", { width });
 
 export const loadFile = (path: string): Promise<ResumeHint> =>
   invoke("load_file", { path });

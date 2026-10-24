@@ -6,11 +6,82 @@ use tauri::{Emitter, Manager, State};
 use crate::history::{History, RecentEntry};
 use crate::media_scan::{MediaResolve, expand_inputs};
 use crate::player::{Player, PlayerError, TrackInfo};
+use crate::platform::VideoSurface;
 use crate::settings::Settings;
 
 type PlayerResult = Result<(), String>;
 type TrackResult = Result<TrackInfo, String>;
 type ScreenshotResult = Result<String, String>;
+
+/// Reserves space for the right-side playlist so it never covers the video.
+#[tauri::command]
+pub fn set_playlist_dock(
+    width: f64,
+    app: tauri::AppHandle,
+    surface: State<'_, VideoSurface>,
+) -> Result<(), String> {
+    let surface = surface.inner().clone();
+    app.run_on_main_thread(move || {
+        if let Err(err) = surface.set_playlist_width(width) {
+            eprintln!("failed to resize video for playlist dock: {err}");
+        }
+    })
+    .map_err(|err| err.to_string())
+}
+
+/// Opens an absolute `http://`/`https://` URL in the user's default browser
+/// via the OS shell. Used by the About dialog's external links. Anything
+/// that is not an http(s) URL is refused so we never shell-execute local
+/// paths or arbitrary schemes from the webview.
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(format!("refusing to open non-http(s) url: {url}"));
+    }
+
+    // `explorer` hands the URL to the default browser without the
+    // cmd.exe quoting pitfalls of `start`; no console window is spawned.
+    #[cfg(target_os = "windows")]
+    let spawned = std::process::Command::new("explorer").arg(&url).spawn();
+
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("open").arg(&url).spawn();
+
+    #[cfg(target_os = "linux")]
+    let spawned = std::process::Command::new("xdg-open").arg(&url).spawn();
+
+    match spawned {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("failed to open url: {err}")),
+    }
+}
+
+/// Names of the frontend playlist scenes requested through
+/// `BATPLAYER_AUTOTEST_SCENE` (comma-separated). Empty in normal runs,
+/// which keeps the scene module in `src/autotest/scenes.ts` dormant.
+#[tauri::command]
+pub fn autotest_scene_names() -> Vec<String> {
+    let raw = if cfg!(debug_assertions) {
+        std::env::var("BATPLAYER_AUTOTEST_SCENE").unwrap_or_default()
+    } else {
+        String::new()
+    };
+    raw.split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Relays one scene assertion line to stderr as `autotest: scene: ...` for
+/// `scripts/autotest.ps1` to parse. Release builds swallow it — this is the
+/// debug harness's only write path (see `src/autotest/scenes.ts`).
+#[tauri::command]
+pub fn autotest_log(line: String) {
+    if cfg!(debug_assertions) {
+        eprintln!("autotest: scene: {line}");
+    }
+}
 
 fn map(err: PlayerError) -> String {
     err.to_string()

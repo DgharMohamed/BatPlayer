@@ -8,6 +8,7 @@
  */
 import { get, writable } from "svelte/store";
 
+import { t } from "../i18n";
 import { seekTo, onPlayerEvent, type PlayerEvent } from "../api/player";
 
 /** Nothing is loaded; the idle mark shows and media controls lock. */
@@ -158,7 +159,15 @@ export function handlePlayerEvent(event: PlayerEvent): void {
     // A freshly opened file always auto-plays; mpv emits no `pause` change
     // when it was already false, so sync the mirror here too.
     paused.set(false);
+    // The event carries the engine's real audio state: a persisted mute or
+    // volume is applied in Rust before the webview binds, so no property
+    // event ever reaches these stores and the controls would disagree.
+    muted.set(event.audioMuted);
+    volume.set(event.audioVolume);
     notice.set(null);
+    if (event.audioTracks.total === 0) {
+      showNotice(t("notices.noAudioTrack"), "info");
+    }
     // A queued resume position is consumed by exactly the file that queued
     // it: this event is that file (the slot clears on end-file/idle too).
     if (pendingResume !== null) {
@@ -186,8 +195,10 @@ export function bindPlayerEvents(): Promise<() => void> {
   return onPlayerEvent(handlePlayerEvent);
 }
 
-const NOTICE_ERROR_MS = 6000;
-const NOTICE_INFO_MS = 3500;
+// Give diagnostic messages enough time to read, especially when a file starts
+// playing immediately after it loads.
+const NOTICE_ERROR_MS = 15000;
+const NOTICE_INFO_MS = 8000;
 
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 

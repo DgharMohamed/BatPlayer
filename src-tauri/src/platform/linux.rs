@@ -7,6 +7,7 @@
 
 use super::Error;
 
+#[derive(Clone)]
 pub struct VideoSurface {
     _private: (),
 }
@@ -17,6 +18,10 @@ impl VideoSurface {
     }
 
     pub fn resize_to_fit(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    pub fn set_playlist_width(&self, _logical_width: f64) -> Result<(), Error> {
         Ok(())
     }
 

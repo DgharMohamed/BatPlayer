@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { get } from "svelte/store";
 
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { setPlaylistDock } from "./api/player";
   import ControlBar from "./components/ControlBar.svelte";
   import BatLogo from "./components/BatLogo.svelte";
   import LoadingOverlay from "./components/LoadingOverlay.svelte";
@@ -10,16 +12,26 @@
   import SpeedChip from "./components/SpeedChip.svelte";
   import TopBar from "./components/topbar/TopBar.svelte";
   import { t } from "./i18n";
+  import {
+    bindWindowState,
+    exitFullscreen,
+    exitMiniPlayer,
+    fullscreen,
+    miniPlayer,
+    toggleFullscreen,
+  } from "./stores/window";
+  import { runPlaylistScenes } from "./autotest/scenes";
   import { keepChromeVisible, pinChromeFocus } from "./stores/chrome";
   import { bindHistory } from "./stores/history";
+  import { playlistDockWidth, playlistOpen } from "./stores/playlist";
   import {
     bindPlayerEvents,
     idle,
     loading,
     mediaLoaded,
+    muted,
     notice,
   } from "./stores/player";
-  import { bindWindowState, exitFullscreen, toggleFullscreen } from "./stores/window";
   import {
     cycleAudioTrack,
     cycleLoop,
@@ -47,6 +59,20 @@
 
   /** True while files are dragged over the window (drop preview). */
   let draggingFiles = $state(false);
+  let contextMenu = $state<{ x: number; y: number } | null>(null);
+  let playlistDockFrame: number | null = null;
+  let pendingDockWidth = 0;
+
+  function syncPlaylistDock(width: number): void {
+    pendingDockWidth = width;
+    if (playlistDockFrame !== null) return;
+    playlistDockFrame = requestAnimationFrame(() => {
+      playlistDockFrame = null;
+      void setPlaylistDock(pendingDockWidth).catch((error: unknown) => {
+        console.error("Could not resize the video for the playlist", error);
+      });
+    });
+  }
 
   onMount(() => {
     const cleanups: Array<() => void> = [];
@@ -55,8 +81,26 @@
       cleanups.push(await bindPlayerEvents());
       cleanups.push(await bindWindowState());
       cleanups.push(await bindHistory());
+      cleanups.push(
+        playlistOpen.subscribe((open) => {
+          syncPlaylistDock(open ? get(playlistDockWidth) : 0);
+        }),
+      );
+      cleanups.push(
+        playlistDockWidth.subscribe((width) => {
+          if (get(playlistOpen)) {
+            syncPlaylistDock(width);
+          }
+        }),
+      );
+      cleanups.push(() => {
+        if (playlistDockFrame !== null) cancelAnimationFrame(playlistDockFrame);
+      });
       // Resume saves on a timer so a crash mid-file still resumes nearby.
       cleanups.push(startProgressSaver());
+      // Playlist-scene harness (scripts/autotest.ps1): dormant without
+      // BATPLAYER_AUTOTEST_SCENE; see src/autotest/scenes.ts.
+      void runPlaylistScenes();
       cleanups.push(
         await getCurrentWebview().onDragDropEvent((event) => {
           switch (event.payload.type) {
@@ -117,6 +161,12 @@
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape" && contextMenu !== null) {
+      event.preventDefault();
+      contextMenu = null;
+      return;
+    }
+
     if (event.defaultPrevented || isTypingTarget(event.target)) {
       return;
     }
@@ -174,15 +224,21 @@
     // Shift+letter chords never firing (Shift+S snapshot, Shift+K pause).
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
-    // Arrows are handled before the letter switch: size depends on Shift
-    // (extrashort ±3s) and Alt (short ±10s); plain is the BatPlayer ±5s.
+    if (key === "F11") {
+      event.preventDefault();
+      void toggleFullscreen();
+      return;
+    }
+
+    // VLC seek distances: Shift ±3s, Alt ±10s, Ctrl ±60s, Ctrl+Alt ±300s.
+    // Plain arrows use VLC's short jump (10s).
     if (key === "ArrowLeft" || key === "ArrowRight") {
       if (!playingNow) {
         return;
       }
       event.preventDefault();
       const delta = key === "ArrowLeft" ? -1 : 1;
-      const jump = event.shiftKey ? 3 : event.altKey ? 10 : 5;
+      const jump = event.shiftKey ? 3 : 10;
       void seekRelative(delta * jump);
       return;
     }
@@ -211,13 +267,16 @@
         void toggleMute();
         return;
       case "s":
-        if (playingNow) {
+        if (event.shiftKey && playingNow) {
           void takeSnapshot();
+        } else if (!event.shiftKey) {
+          void stopPlayback();
         }
         return;
       case "e":
-        // BatPlayer alias: stop (VLC parity for the classic "end" mnemonic).
-        void stopPlayback();
+        if (playingNow) {
+          void stepFrame(1);
+        }
         return;
       case "a":
         if (playingNow) {
@@ -259,8 +318,12 @@
         }
         return;
       case "=":
+        if (playingNow) {
+          void resetSpeed();
+        }
+        return;
       case "+":
-        // VLC's +/- jump the rate by 1 in either direction.
+        // VLC: plus/minus change speed; brackets make fine adjustments.
         if (playingNow) {
           void stepSpeed(1);
         }
@@ -296,6 +359,34 @@
       default:
         break;
     }
+  }
+
+  function onContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    if (event.target instanceof Element && event.target.closest(".player-context-menu")) {
+      return;
+    }
+    const menuWidth = 224;
+    const menuHeight = 470;
+    contextMenu = {
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+    };
+  }
+
+  function closeContextMenuOnOutside(event: PointerEvent): void {
+    if (
+      event.target instanceof Element &&
+      event.target.closest(".player-context-menu") !== null
+    ) {
+      return;
+    }
+    contextMenu = null;
+  }
+
+  function runContextAction(action: () => unknown): void {
+    contextMenu = null;
+    void action();
   }
 
   /** Double-clicking the video toggles fullscreen, as in every player. */
@@ -339,6 +430,8 @@
 </script>
 <svelte:window
   onkeydown={onKeydown}
+  oncontextmenu={onContextMenu}
+  onpointerdown={closeContextMenuOnOutside}
   onpointermove={keepChromeVisible}
   onfocusin={onFocusIn}
   onfocusout={onFocusOut}
@@ -349,11 +442,14 @@
   transparent webview), so the bars are overlays and the stage itself must
   stay see-through.
 -->
-<div class="app">
+<div class="app" class:mini-player={$miniPlayer}>
   <TopBar />
 
   <main
     class="stage"
+    style:width={$playlistOpen && !$miniPlayer
+      ? `calc(100% - ${$playlistDockWidth}px)`
+      : "100%"}
     aria-label={t("video.areaLabel")}
     ondblclick={onStageDblclick}
     onwheel={onStageWheel}
@@ -380,6 +476,80 @@
   <Osd />
   <SpeedChip />
 
+  {#if $miniPlayer}
+    <div class="mini-drag-region" data-tauri-drag-region aria-hidden="true">
+      <span data-tauri-drag-region></span>
+    </div>
+    <button
+      class="mini-exit"
+      type="button"
+      title={t("controls.exitMiniPlayer")}
+      aria-label={t("controls.exitMiniPlayer")}
+      onclick={() => void exitMiniPlayer()}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z" />
+      </svg>
+    </button>
+  {/if}
+
+  {#if contextMenu !== null}
+    <div
+      class="player-context-menu"
+      role="menu"
+      aria-label={t("video.areaLabel")}
+      style:left="{contextMenu.x}px"
+      style:top="{contextMenu.y}px"
+      oncontextmenu={(event) => event.preventDefault()}
+    >
+      <button role="menuitem" title={`${t("menu.playPause")} (Space)`} disabled={!$mediaLoaded} onclick={() => runContextAction(togglePlayPause)}>
+        {t("menu.playPause")}
+      </button>
+      <button role="menuitem" title={`${t("menu.stop")} (S)`} disabled={!$mediaLoaded} onclick={() => runContextAction(stopPlayback)}>
+        {t("menu.stop")}
+      </button>
+      <button role="menuitem" title={`${t("menu.previous")} (P)`} disabled={!$mediaLoaded} onclick={() => runContextAction(prevTrack)}>
+        {t("menu.previous")}
+      </button>
+      <button role="menuitem" title={`${t("menu.next")} (N)`} disabled={!$mediaLoaded} onclick={() => runContextAction(nextTrack)}>
+        {t("menu.next")}
+      </button>
+      <div class="context-divider" role="separator"></div>
+      <button role="menuitem" title={`${t("controls.slower")} ([ / -)`} disabled={!$mediaLoaded} onclick={() => runContextAction(() => stepSpeed(-0.25))}>
+        {t("controls.slower")}
+      </button>
+      <button role="menuitem" title={`${t("menu.resetSpeed")} (=)`} disabled={!$mediaLoaded} onclick={() => runContextAction(resetSpeed)}>
+        {t("menu.resetSpeed")}
+      </button>
+      <button role="menuitem" title={`${t("controls.faster")} (] / +)`} disabled={!$mediaLoaded} onclick={() => runContextAction(() => stepSpeed(0.25))}>
+        {t("controls.faster")}
+      </button>
+      <div class="context-divider" role="separator"></div>
+      <button role="menuitem" title={`${t($muted ? "menu.unmute" : "menu.mute")} (M)`} disabled={!$mediaLoaded} onclick={() => runContextAction(toggleMute)}>
+        {t($muted ? "menu.unmute" : "menu.mute")}
+      </button>
+      <button role="menuitem" title={`${t("menu.audioTrack")} (B)`} disabled={!$mediaLoaded} onclick={() => runContextAction(cycleAudioTrack)}>
+        {t("menu.audioTrack")}
+      </button>
+      <button role="menuitem" title={`${t("menu.subtitleTrack")} (V)`} disabled={!$mediaLoaded} onclick={() => runContextAction(cycleSubtitleTrack)}>
+        {t("menu.subtitleTrack")}
+      </button>
+      <div class="context-divider" role="separator"></div>
+      <button role="menuitem" title={`${t("menu.snapshot")} (Shift+S)`} disabled={!$mediaLoaded} onclick={() => runContextAction(takeSnapshot)}>
+        {t("menu.snapshot")}
+      </button>
+      <button role="menuitem" title={`${t("menu.playlist")} (Ctrl+L)`} onclick={() => runContextAction(togglePlaylist)}>
+        {t("menu.playlist")}
+      </button>
+      <button role="menuitem" title={t("controls.miniPlayer")} disabled={!$mediaLoaded} onclick={() => runContextAction(() => void enterMiniPlayer())}>
+        {t("controls.miniPlayer")}
+      </button>
+      <button role="menuitem" title={`${t($fullscreen ? "menu.leaveFullscreen" : "menu.fullscreen")} (F)`} onclick={() => runContextAction(() => toggleFullscreen())}>
+        {t($fullscreen ? "menu.leaveFullscreen" : "menu.fullscreen")}
+      </button>
+    </div>
+  {/if}
+
   {#if draggingFiles}
     <div class="drop-overlay" aria-hidden="true">
       <p>{t("drop.overlay")}</p>
@@ -393,8 +563,108 @@
     background: transparent;
   }
 
+  :global(.mini-player .top-bar),
+  :global(.mini-player .playlist-panel) {
+    display: none !important;
+  }
+
+  .mini-exit {
+    position: fixed;
+    top: 5px;
+    right: 5px;
+    z-index: 45;
+    display: grid;
+    width: 22px;
+    height: 22px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(12, 12, 15, 0.82);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .mini-exit svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+  }
+
+  .mini-exit:hover { color: var(--accent); }
+
+  .mini-drag-region {
+    position: fixed;
+    top: 5px;
+    left: 50%;
+    z-index: 44;
+    display: grid;
+    width: 72px;
+    height: 18px;
+    place-items: center;
+    transform: translateX(-50%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(12, 12, 15, 0.62);
+    cursor: move;
+  }
+
+  .mini-drag-region span {
+    width: 26px;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .player-context-menu {
+    position: fixed;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    width: 224px;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    padding: 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: rgba(18, 18, 22, 0.97);
+    color: var(--text);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(16px);
+  }
+
+  .player-context-menu button {
+    min-height: 30px;
+    padding: 5px 9px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .player-context-menu button:hover:enabled,
+  .player-context-menu button:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--accent);
+  }
+
+  .player-context-menu button:disabled {
+    opacity: 0.42;
+    cursor: default;
+  }
+
+  .context-divider {
+    height: 1px;
+    margin: 4px 5px;
+    background: var(--border);
+  }
+
   .stage {
     height: 100%;
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -443,9 +713,8 @@
     background: var(--bg-elevated);
     color: var(--text);
     font-size: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     z-index: 40;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
     animation: notice-in 180ms ease both;

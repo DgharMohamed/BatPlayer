@@ -13,6 +13,8 @@ mod player;
 pub(crate) mod settings;
 pub mod storage;
 
+use std::time::Duration;
+
 use tauri::{
     LogicalPosition, LogicalSize, Manager, WebviewUrl, WindowEvent, webview::WebviewBuilder,
 };
@@ -30,6 +32,8 @@ pub fn run() {
             commands::load_file,
             commands::save_position,
             commands::resolve_media_paths,
+            commands::autotest_scene_names,
+            commands::autotest_log,
             commands::play_pause,
             commands::stop,
             commands::seek_to,
@@ -44,6 +48,8 @@ pub fn run() {
             commands::screenshot,
             commands::recent_files,
             commands::clear_history,
+            commands::set_playlist_dock,
+            commands::open_external,
         ])
         .setup(|app| {
             // The window itself must stay OPAQUE: on Windows, Tauri's
@@ -72,6 +78,7 @@ pub fn run() {
             // transparent webview so the HTML controls overlay the video.
             let surface = platform::VideoSurface::attach(&window)?;
             surface.resize_to_fit()?;
+            app.manage(surface.clone());
 
             // The runtime's frameless drag-resize ring only attaches for
             // windows that own their webview content; ours is added with
@@ -91,6 +98,31 @@ pub fn run() {
             let audio = settings.audio();
             app.manage(Player::new(surface.wid()?, app.handle().clone(), audio)?);
 
+            let app_handle = app.handle().clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::Resized(_) = event
+                    && let Err(err) = surface.resize_to_fit()
+                {
+                    eprintln!("failed to resize the video surface: {err}");
+                }
+                // The fullscreen transition settles its client size over
+                // several events, and mpv's `wid` renderer can latch onto a
+                // transient one and keep presenting at that stale geometry
+                // (picture top-left, rest of the screen black). Once the
+                // resize burst is over, force two WM_SIZE steps so mpv
+                // re-reads the settled size. Redundant nudges are harmless.
+                let nudger = surface.clone();
+                let handle = app_handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(250));
+                    let _ = handle.run_on_main_thread(move || {
+                        if let Err(err) = nudger.force_repaint() {
+                            eprintln!("failed to nudge the video surface: {err}");
+                        }
+                    });
+                });
+            });
+
             // Persisted recent-files state for the File menu (Milestone 3),
             // plus the resume points and audio settings read above.
             app.manage(history::History::open(&data_dir));
@@ -99,14 +131,6 @@ pub fn run() {
             // Optional env-var driven self-test (scripts/autotest.ps1).
             #[cfg(debug_assertions)]
             autotest::kick(app.handle().clone());
-
-            window.on_window_event(move |event| {
-                if let WindowEvent::Resized(_) = event
-                    && let Err(err) = surface.resize_to_fit()
-                {
-                    eprintln!("failed to resize the video surface: {err}");
-                }
-            });
 
             Ok(())
         })

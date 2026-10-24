@@ -4,7 +4,13 @@
 //! with a near-black background, and is kept at the bottom of the window's
 //! z-order so the transparent webview above it lets the video show through.
 
-use std::ffi::c_void;
+use std::{
+    ffi::c_void,
+    sync::{
+        Arc,
+        atomic::{AtomicI32, Ordering},
+    },
+};
 
 use windows::Win32::Foundation::{
     COLORREF, ERROR_CLASS_ALREADY_EXISTS, GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, POINTS,
@@ -21,8 +27,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetParent, GetWindowLongPtrW, GetWindowRect, HCURSOR, HICON, HTBOTTOM,
     HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, HTTRANSPARENT,
     HWND_BOTTOM, HWND_TOP, IsZoomed, PostMessageW, RegisterClassW, SM_CXFRAME, SM_CYFRAME,
-    SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SetWindowPos,
-    WINDOW_EX_STYLE, WM_NCDESTROY, WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_SIZE, WM_USER,
+    SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER,
+    SetWindowPos, WINDOW_EX_STYLE, WM_NCDESTROY, WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_SIZE, WM_USER,
     WNDCLASS_STYLES, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_SIZEBOX, WS_VISIBLE,
 };
 use windows::core::{Free, Owned, PCWSTR, w};
@@ -30,6 +36,10 @@ use windows::core::{Free, Owned, PCWSTR, w};
 use super::Error;
 
 const CLASS_NAME: PCWSTR = w!("BatPlayerVideoSurface");
+
+/// Window class of the child mpv creates inside our surface when embedding
+/// via `wid`; resizing THIS window is what rebuilds its swapchain.
+const MPV_WINDOW_CLASS: PCWSTR = w!("mpv");
 
 /// Surface background until mpv takes over painting: 0x00BBGGRR of the UI's
 /// near-black background rgb(10, 10, 12).
@@ -39,6 +49,18 @@ pub struct VideoSurface {
     /// Win32 HWNDs stored as `isize` so the struct stays `Send`.
     parent: isize,
     child: isize,
+    /// Reserved logical width for a docked playlist, shared with event hooks.
+    playlist_width: Arc<AtomicI32>,
+}
+
+impl Clone for VideoSurface {
+    fn clone(&self) -> Self {
+        Self {
+            parent: self.parent,
+            child: self.child,
+            playlist_width: Arc::clone(&self.playlist_width),
+        }
+    }
 }
 
 impl VideoSurface {
@@ -52,7 +74,11 @@ impl VideoSurface {
         // Safety: runs on the Tauri main thread (setup hook); all handles
         // belong to this process.
         let child = unsafe { create_child(parent)? };
-        Ok(Self { parent, child })
+        Ok(Self {
+            parent,
+            child,
+            playlist_width: Arc::new(AtomicI32::new(0)),
+        })
     }
 
     /// Fits the surface to the parent's full client area. The HTML bars are
@@ -62,21 +88,18 @@ impl VideoSurface {
     pub fn resize_to_fit(&self) -> Result<(), Error> {
         let parent = HWND(self.parent as *mut c_void);
         let child = HWND(self.child as *mut c_void);
+        let (width, height) = self.content_size(parent)?;
 
         // Safety: window events run on the Tauri main thread; handles belong
         // to this process.
         unsafe {
-            let mut rect = RECT::default();
-            GetClientRect(parent, &mut rect)
-                .map_err(|err| Error::Platform(format!("GetClientRect failed: {err}")))?;
-
             SetWindowPos(
                 child,
                 Some(HWND_BOTTOM),
                 0,
                 0,
-                rect.right,
-                rect.bottom,
+                width,
+                height,
                 SWP_NOACTIVATE,
             )
             .map_err(|err| Error::Platform(format!("SetWindowPos failed: {err}")))?;
@@ -84,10 +107,74 @@ impl VideoSurface {
         Ok(())
     }
 
+    /// Reserves a right-side playlist dock and resizes the native video area.
+    pub fn set_playlist_width(&self, logical_width: f64) -> Result<(), Error> {
+        self.playlist_width.store(
+            logical_width.max(0.0).round() as i32,
+            Ordering::Relaxed,
+        );
+        self.resize_to_fit()
+    }
+
+    /// Forces the embedded renderer to re-present at the settled size: two
+    /// quick size steps (h−1 px, then h) on the window mpv actually renders
+    /// through — its own `mpv`-class child inside the surface. During a
+    /// fullscreen transition that renderer can latch onto a transient client
+    /// size and keep presenting every frame at the stale geometry: the
+    /// picture sits top-left and the rest of the surface stays black on
+    /// screen, even though the window rects are all already correct. A
+    /// same-size `SetWindowPos` emits no `WM_SIZE`, so the nudge walks
+    /// through a different size to make mpv rebuild its swapchain at the
+    /// real one.
+    pub fn force_repaint(&self) -> Result<(), Error> {
+        let surface = HWND(self.child as *mut c_void);
+        let (width, height) = self.content_size(HWND(self.parent as *mut c_void))?;
+
+        // Safety: runs on the Tauri main thread (posted from the window
+        // event closure); handles belong to this process.
+        unsafe {
+            let render =
+                FindWindowExW(Some(surface), None, MPV_WINDOW_CLASS, None).unwrap_or(surface);
+            for step in [height.saturating_sub(1), height] {
+                SetWindowPos(
+                    render,
+                    None,
+                    0,
+                    0,
+                    width,
+                    step,
+                    SWP_NOACTIVATE | SWP_NOZORDER,
+                )
+                .map_err(|err| Error::Platform(format!("SetWindowPos failed: {err}")))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn content_size(&self, parent: HWND) -> Result<(i32, i32), Error> {
+        let (width, height) = unsafe { client_size(parent)? };
+        let dpi = unsafe { GetDpiForWindow(parent) }.max(96);
+        let dock_width = (f64::from(self.playlist_width.load(Ordering::Relaxed))
+            * f64::from(dpi)
+            / 96.0)
+            .round() as i32;
+        Ok((width.saturating_sub(dock_width).max(1), height))
+    }
+
     /// Window id for mpv's `wid` option: the raw child `HWND`, as an integer
     /// because mpv takes a stringified pointer.
     pub fn wid(&self) -> Result<i64, Error> {
         Ok(self.child as i64)
+    }
+}
+
+/// The parent's client size in physical pixels.
+unsafe fn client_size(parent: HWND) -> Result<(i32, i32), Error> {
+    unsafe {
+        let mut rect = RECT::default();
+        GetClientRect(parent, &mut rect)
+            .map_err(|err| Error::Platform(format!("GetClientRect failed: {err}")))?;
+        Ok((rect.right, rect.bottom))
     }
 }
 

@@ -10,7 +10,10 @@
 #        (Windows PowerShell 5.1 or PowerShell 7)
 # Pass -GenerateOnly to just (re)write the sample clip into %TEMP%.
 
-param([switch] $GenerateOnly)
+param(
+  [switch] $GenerateOnly,
+  [switch] $SkipScenes
+)
 
 $ErrorActionPreference = "Stop"
 

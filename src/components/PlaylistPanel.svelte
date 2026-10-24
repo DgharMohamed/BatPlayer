@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { expoOut } from "svelte/easing";
   import { fly } from "svelte/transition";
 
@@ -8,6 +9,7 @@
     loopMode,
     playAt,
     playlistIndex,
+    playlistDockWidth,
     playlistItems,
     playlistOpen,
     removeAt,
@@ -17,6 +19,61 @@
 
   /** Feedback still arrives, just without travel, when motion is reduced. */
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let resizing = $state(false);
+  let controlBarHeight = $state(72);
+  let dragStartX = 0;
+  let dragStartWidth = 320;
+
+  function clampDockWidth(width: number): number {
+    const maxWidth = Math.min(560, Math.max(240, window.innerWidth - 320));
+    return Math.max(240, Math.min(maxWidth, Math.round(width)));
+  }
+
+  function onResizeStart(event: PointerEvent): void {
+    event.preventDefault();
+    resizing = true;
+    dragStartX = event.clientX;
+    dragStartWidth = $playlistDockWidth;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function onResizeMove(event: PointerEvent): void {
+    if (!resizing) return;
+    playlistDockWidth.set(clampDockWidth(dragStartWidth + dragStartX - event.clientX));
+  }
+
+  function onResizeEnd(event: PointerEvent): void {
+    resizing = false;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function onResizeKeydown(event: KeyboardEvent): void {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowLeft" ? 1 : -1;
+    playlistDockWidth.update((width) => clampDockWidth(width + direction * 16));
+  }
+
+  onMount(() => {
+    const keepWidthInBounds = (): void => {
+      playlistDockWidth.update((width) => clampDockWidth(width));
+    };
+    const controlBar = document.querySelector<HTMLElement>(".control-bar");
+    const measureControlBar = (): void => {
+      if (controlBar) controlBarHeight = controlBar.getBoundingClientRect().height;
+    };
+    const observer = controlBar ? new ResizeObserver(measureControlBar) : null;
+    observer?.observe(controlBar!);
+    measureControlBar();
+    window.addEventListener("resize", keepWidthInBounds);
+    return () => {
+      window.removeEventListener("resize", keepWidthInBounds);
+      observer?.disconnect();
+    };
+  });
 </script>
 
 <!--
@@ -27,12 +84,30 @@
 {#if $playlistOpen}
   <aside
     class="playlist-panel"
+    class:resizing
+    style:width="{$playlistDockWidth}px"
+    style:bottom="{controlBarHeight}px"
     transition:fly={{
       x: reducedMotion.matches ? 0 : 300,
       duration: reducedMotion.matches ? 140 : 200,
       easing: expoOut,
     }}
   >
+    <div
+      class="resize-grip"
+      role="separator"
+      tabindex="0"
+      aria-label={t("playlist.resize")}
+      aria-orientation="vertical"
+      aria-valuemin="240"
+      aria-valuemax={Math.min(560, Math.max(240, window.innerWidth - 320))}
+      aria-valuenow={$playlistDockWidth}
+      onpointerdown={onResizeStart}
+      onpointermove={onResizeMove}
+      onpointerup={onResizeEnd}
+      onpointercancel={onResizeEnd}
+      onkeydown={onResizeKeydown}
+    ></div>
     <header class="head">
       <h2>{t("playlist.title")}</h2>
       <div class="head-actions">
@@ -40,7 +115,7 @@
           class="chip"
           class:armed={$loopMode !== "off"}
           type="button"
-          title={t($loopMode === "one" ? "menu.repeatCurrent" : "menu.loopPlaylist")}
+          title={`${t($loopMode === "one" ? "menu.repeatCurrent" : "menu.loopPlaylist")} (L)`}
           onclick={() => void cycleLoop()}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -53,14 +128,14 @@
           {t($loopMode === "one" ? "menu.repeatCurrent" : "menu.loopPlaylist")}
         </button>
         <button
-          class="chip"
+          class="chip shuffle-chip"
           class:armed={$shuffleEnabled}
           type="button"
-          title={t("playlist.shuffle")}
+          title={`${t("playlist.shuffle")} (R)`}
           onclick={() => void toggleShuffle()}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M17 3l4 4-4 4V8h-2.3l-2.2 2.6-1.5-1.7L13.5 6H17V3zm-9.5 0h2.3L21 17h.001V21H14L6 11H3V8h3.2L9 11.6 11 9.3z" />
+            <path d="M18 14l4 4-4 4M18 2l4 4-4 4M2 18h1.5a3 3 0 0 0 2.4-1.2l9.2-12.6A3 3 0 0 1 17.5 3H22M2 6h1.5a3 3 0 0 1 2.4 1.2l9.2 12.6a3 3 0 0 0 2.4 1.2H22" />
           </svg>
           {t("playlist.shuffle")}
         </button>
@@ -119,37 +194,67 @@
     position: fixed;
     top: 40px;
     right: 0;
-    bottom: 96px;
-    width: 300px;
+    bottom: 72px;
+    width: 320px;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
-    background: linear-gradient(to top, rgba(6, 6, 8, 0.97), rgba(10, 10, 13, 0.92));
-    backdrop-filter: blur(16px);
-    z-index: 22;
+    border-left: 1px solid var(--border);
+    background: #0b0c10;
+    /* The playback bar sits above the dock and remains fully interactive. */
+    z-index: 19;
     overflow: hidden;
   }
 
+  .resize-grip {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 10px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .resize-grip::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    background: transparent;
+    content: "";
+    transition: background var(--transition-fast);
+  }
+
+  .resize-grip:hover::after,
+  .resizing .resize-grip::after,
+  .resize-grip:focus-visible::after {
+    background: var(--accent);
+  }
+
+  .resize-grip:focus-visible { outline: none; }
+
   .head {
-    padding: 10px 12px 8px;
+    padding: 14px 14px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     border-bottom: 1px solid var(--border);
   }
 
   .head h2 {
     margin: 0;
-    font-size: 13px;
-    letter-spacing: 0.04em;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
     color: var(--text);
   }
 
   .head-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     flex-wrap: wrap;
   }
 
@@ -157,10 +262,11 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 8px;
+    min-height: 30px;
+    padding: 5px 9px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: transparent;
+    background: #111319;
     color: var(--text-dim);
     font-size: 12px;
     cursor: pointer;
@@ -173,6 +279,14 @@
     width: 13px;
     height: 13px;
     fill: currentColor;
+  }
+
+  .chip.shuffle-chip svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .chip:hover {
@@ -199,7 +313,7 @@
   .queue {
     flex: 1;
     margin: 0;
-    padding: 6px;
+    padding: 9px 8px;
     list-style: none;
     overflow-y: auto;
   }
@@ -207,7 +321,8 @@
   .queue li {
     display: flex;
     align-items: stretch;
-    gap: 2px;
+    gap: 4px;
+    margin-bottom: 3px;
   }
 
   .row {
@@ -215,11 +330,12 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 8px;
-    border: none;
+    gap: 10px;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    background: transparent;
+    background: #101116;
     color: var(--text);
     font-size: 13px;
     text-align: left;
@@ -227,7 +343,8 @@
   }
 
   .row:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: #181a21;
+    border-color: var(--border);
   }
 
   .row:focus-visible {
@@ -237,7 +354,8 @@
 
   .row .order {
     flex: none;
-    min-width: 16px;
+    min-width: 22px;
+    text-align: center;
     color: var(--text-dim);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
@@ -245,6 +363,8 @@
 
   .row.current {
     color: var(--accent);
+    border-color: rgba(255, 212, 0, 0.24);
+    background: rgba(255, 212, 0, 0.08);
   }
 
   .row.current .order {
@@ -263,8 +383,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: none;
     border-radius: var(--radius-sm);

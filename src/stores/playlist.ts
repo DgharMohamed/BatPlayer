@@ -37,6 +37,8 @@ export const loopMode = writable<LoopMode>("off");
 export const shuffleEnabled = writable(false);
 /** Playlist panel visibility (View ▸ Playlist, Ctrl+L). */
 export const playlistOpen = writable(false);
+/** Dock width in CSS pixels; the native video surface reserves the same space. */
+export const playlistDockWidth = writable(320);
 
 /**
  * Shuffled play order as queue indices, consumed item by item; empty while

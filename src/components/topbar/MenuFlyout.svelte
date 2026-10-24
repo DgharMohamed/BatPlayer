@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import type { MenuEntry } from "./menus";
 
   interface Props {
@@ -23,14 +23,15 @@
       <button
         class="menu-item"
         type="button"
+        title={entry.hint ? `${entry.label} (${entry.hint})` : entry.label}
         role={entry.checked !== undefined ? "menuitemcheckbox" : "menuitem"}
         aria-checked={entry.checked === true}
         disabled={entry.disabled}
         onclick={() => onpick(entry)}
       >
-        {#if entry.checked !== undefined}
-          <span class="check" class:set={entry.checked} aria-hidden="true">✓</span>
-        {/if}
+        <span class="check" class:set={entry.checked} aria-hidden="true">
+          {entry.checked !== undefined ? "✓" : ""}
+        </span>
         <span class="label">{entry.label}</span>
         {#if entry.hint}
           <span class="hint">{entry.hint}</span>
@@ -45,8 +46,8 @@
     position: absolute;
     top: 100%;
     left: 0;
-    min-width: 232px;
-    padding: 5px;
+    min-width: 252px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
     background: var(--bg-elevated);
@@ -58,11 +59,10 @@
 
   .menu-item {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 26px;
+    align-items: center;
+    gap: 8px;
     width: 100%;
-    padding: 6px 10px;
+    padding: 7px 9px;
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -75,11 +75,11 @@
 
   /* Check column keeps the labels aligned whether an entry is checked or not. */
   .check {
-    width: 14px;
+    width: 16px;
     flex: none;
-    align-self: center;
     color: transparent;
     font-size: 12px;
+    text-align: center;
   }
 
   .check.set {
@@ -101,14 +101,24 @@
   }
 
   .hint {
+    flex: none;
+    margin-left: auto;
     font-size: 12px;
     color: var(--text-dim);
     letter-spacing: 0.02em;
+    text-align: right;
+  }
+
+  .label {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
   }
 
   .separator {
     height: 1px;
-    margin: 5px 6px;
+    margin: 6px 5px;
     background: var(--border);
   }
 </style>
+
